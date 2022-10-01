@@ -169,7 +169,7 @@ This will:
 
 A very convenient aspect of using changesets in you can run multiple scenarios without touching the database.
 
-In the end you can compare the actual changeset you get against your expected 
+In the end you can compare the actual changeset you get against your expected one.
 
 ## Sorbet
 
@@ -337,7 +337,7 @@ changeset = appointment_attended(appointment)
 changeset.push!
 ```
 
-One database transaction, workers triggered at the apprpriate time.
+One database transaction, workers triggered at the appropriate time.
 
 ## But why all these classes?
 
