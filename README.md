@@ -173,7 +173,7 @@ def charge(customer, amount_cents)
   # These two create! calls must
   # either both succeed or both fail
   invoice = Invoice.create!(
-    customer: subscription,
+    customer: customer,
     amount_cents: amount_cents,
   )
   charge = Charge.create!(
@@ -190,7 +190,7 @@ It generally goes down to adding a transaction:
 def charge(customer, amount_cents)
   ActiveRecord::Base.transaction do
     invoice = Invoice.create!(
-      customer: subscription,
+      customer: customer,
       amount_cents: amount_cents,
     )
     charge = Charge.create!(
@@ -222,7 +222,7 @@ end
 def charge(customer, amount_cents)
   ActiveRecord::Base.transaction(requires_new: true) do
     invoice = Invoice.create!(
-      customer: subscription,
+      customer: customer,
       amount_cents: amount_cents,
     )
     charge = Charge.create!(
@@ -264,7 +264,7 @@ class EventsCatalog
     ChargeJob.perform_async(event.payload[:id])
   end
 
-  def insurance_claim_created
+  def insurance_claim_created(event)
     SubmitToInsuranceJob.perform_async(event.payload[:id])
   end
 end
@@ -285,11 +285,9 @@ def appointment_attended(appointment)
 
   copay_cents = appointment.service.copay_cents
   new_charge, charge_changeset = charge(appointment.customer, copay_cents)
-
   changeset.merge_child(charge_changeset)
 
   insurance_claim, insurance_claim_changeset = create_insurance_claim(appointment, copay: new_charge)
-
   changeset.merge_child(insurance_claim_changeset)
 
   # most methods on changeset return the changeset itself
@@ -304,7 +302,7 @@ def charge(customer, amount_cents)
   changeset = Changeset.new(EventsCatalog)
 
   invoice = Invoice.new(
-    customer: subscription,
+    customer: customer,
     amount_cents: amount_cents,
   )
   charge = Charge.new(
