@@ -1,10 +1,12 @@
 # Changeset
 
-The changeset contains all database operations and events after a command is executed.
+The changeset contains all database operations and events of a command.
 
-The point of the Changeset is to delay the moment you persist until the end of a chain of method calls. The main reasons are:
-- use the shortest database transactions possible
-- trigger necessary events once all data is persisted
+The point of the Changeset is to delay the moment you persist until the end of a chain of method calls. 
+
+The main reasons are:
+- use the shortest database transactions possible (holding transactions leads to many errors, nested transactions as well)
+- trigger necessary events once all data is persisted (jobs fail if started before transaction ends)
 
 Whatever the way you organize your code (plain methods, service objects...), you can leverage the changesets.
 
@@ -16,7 +18,7 @@ gem "changeset", github: "apneadiving/changeset"
 ```
 
 ## Configuration
-One configuration is need to use the gem: tell it how to use database transactions:
+One configuration is needed to use the gem: tell it how to use database transactions:
 
 ```ruby
 Changeset.configure do |config|
@@ -84,7 +86,7 @@ The unicity is based on:
 ## Database Operations
 
 They are meant to be objects containing the relevant logic to call the database and commit persistence operations.
-These classes must match the PersistenceInterface and must respond to `commit`.
+These classes must match the PersistenceInterface: respond to `commit`.
 
 You can create any depending on your needs: create, update, delete, bulk upsert...
 
@@ -112,11 +114,13 @@ changeset.add_db_operation(
 )
 ```
 
-Database operations will then be commited in the exact order they were added to the changeset.
+Database operations will then be commited in the order they were added to the changeset.
 
 ## Merging changesets
 
-The very point of changesets is they can be merged. On merge:
+The very point of changesets is they can be merged. 
+
+On merge:
 - parent changeset concatenates all db operations of its child
 - parent changeset merges all events from its child
 
@@ -149,26 +153,27 @@ parent_changeset
 # - only one planning_updated event will be dispatched with param {week: "2022W48"}
 ```
 
-## Actually do the work
+## Push!
 
-Whenever you know it is the appropriate time to persist data and trigger events, you can call:
+At the end of the calls chain, it is the appropriate time to persist data and trigger events:
 
 ```ruby
 changeset.push!
 ```
 
 This will:
-- persist all database operation in a single transaction
+- persist all database operations in a single transaction
 - then trigger all events (outside the transaction)
 
-## Testing
+## Testing ⚡
 
 A very convenient aspect of using changesets in you can run multiple scenarios without touching the database.
-In the end you can simply compare the actual changeset you get against your expected one
+
+In the end you can compare the actual changeset you get against your expected 
 
 ## Sorbet
 
-This gem is compatible with Sorbet and contains all its definitions.
+This gem is typed with Sorbet and contains rbi definitions.
 
 ## Example
 
@@ -203,9 +208,9 @@ def charge(customer, amount_cents)
       invoice: invoice,
       amount_cents: amount_cents,
     )
-    # we can argue whether or not this should go inside the transaction...
-    ChargeJob.perform_async(charge.id)
   end
+  # we can argue whether or not this should go inside the transaction...
+  ChargeJob.perform_async(charge.id)
 end
 ```
 
@@ -219,10 +224,9 @@ def appointment_attended(appointment)
 
     # create_insurance_claim would create yet another nested transaction
     insurance_claim = create_insurance_claim(appointment, copay: charge)
-
-    # again, triggering the job here is maybe not the best option
-    SubmitToInsuranceJob.perform_async(insurance_claim.id)
   end
+  # again, triggering the job here is maybe not the best option
+  SubmitToInsuranceJob.perform_async(insurance_claim.id)
 end
 
 def charge(customer, amount_cents)
@@ -235,9 +239,9 @@ def charge(customer, amount_cents)
       invoice: invoice,
       amount_cents: amount_cents,
     )
-    # we can argue whether or not this should go inside the transaction...
-    ChargeJob.perform_async(charge.id)
   end
+  # we can argue whether or not this should go inside the transaction...
+  ChargeJob.perform_async(charge.id)
 end
 ```
 
@@ -287,46 +291,45 @@ class BasicPersistenceHandler
 end
 
 def appointment_attended(appointment)
-  changeset = Changeset.new(EventsCatalog)
+  Changeset.new(EventsCatalog).yield_self do |changeset|
+    copay_cents = appointment.service.copay_cents
+    
+    new_charge, charge_changeset = charge(appointment.customer, copay_cents)
+    changeset.merge_child(charge_changeset)
 
-  copay_cents = appointment.service.copay_cents
-  new_charge, charge_changeset = charge(appointment.customer, copay_cents)
-  changeset.merge_child(charge_changeset)
+    insurance_claim, insurance_claim_changeset = create_insurance_claim(appointment, copay: new_charge)
+    changeset.merge_child(insurance_claim_changeset)
 
-  insurance_claim, insurance_claim_changeset = create_insurance_claim(appointment, copay: new_charge)
-  changeset.merge_child(insurance_claim_changeset)
-
-  # most methods on changeset return the changeset itself
-  changeset.add_event(
-    :insurance_claim_created,
-    # notice the argument here is a proc: the id is not yet determined
-    -> { { id: insurance_claim.id } }
-  )
+    changeset.add_event(
+      :insurance_claim_created,
+      -> { { id: insurance_claim.id } }
+    )
+  end
 end
 
 def charge(customer, amount_cents)
-  changeset = Changeset.new(EventsCatalog)
-
-  invoice = Invoice.new(
-    customer: customer,
-    amount_cents: amount_cents,
-  )
-  charge = Charge.new(
-    invoice: invoice,
-    amount_cents: amount_cents,
-  )
-
-  changeset
-    .add_db_operations(
-      BasicPersistenceHandler.new(invoice),
-      BasicPersistenceHandler.new(charge)
+  Changeset.new(EventsCatalog).yield_self do |changeset|
+    invoice = Invoice.new(
+      customer: customer,
+      amount_cents: amount_cents
     )
-    .add_event(
-      :customer_charged,
-      -> { { id: charge.id } }
+    charge = Charge.new(
+      invoice: invoice,
+      amount_cents: amount_cents
     )
 
-  [charge, changeset]
+    changeset
+      .add_db_operations(
+        BasicPersistenceHandler.new(invoice),
+        BasicPersistenceHandler.new(charge)
+      )
+      .add_event(
+        :customer_charged,
+        -> { { id: charge.id } }
+      )
+
+    [charge, changeset]
+  end
 end
 
 # usage
