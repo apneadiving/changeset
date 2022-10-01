@@ -20,7 +20,7 @@ class Changeset
         @raw_payload_proc = raw_payload
       else
         @raw_payload = raw_payload
-        @raw_payload_proc = ->{{}}
+        @raw_payload_proc = -> { {} }
       end
     end
 
