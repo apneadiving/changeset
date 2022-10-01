@@ -17,4 +17,5 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
+      - run: bundle install --jobs 4 --retry 3
       - run: bundle exec rspec spec
