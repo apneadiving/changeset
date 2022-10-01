@@ -8,6 +8,12 @@ The point of the Changeset is to delay the moment you persist until the end of a
 
 Whatever the way you organize your code (plain methods, service objects...), you can leverage the changesets.
 
+## Installation
+
+```ruby
+git_source(:github) { |project| File.join("https://github.com", "#{project}.git") }
+gem "changeset", github: "apneadiving/changeset"
+```
 
 ## Configuration
 One configuration is need to use the gem: tell it how to use database transactions:
@@ -160,7 +166,7 @@ This will:
 A very convenient aspect of using changesets in you can run multiple scenarios without touching the database.
 In the end you can simply compare the actual changeset you get against your expected one
 
-# Sorbet
+## Sorbet
 
 This gem is compatible with Sorbet and contains all its definitions.
 
