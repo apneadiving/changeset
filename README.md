@@ -1,3 +1,5 @@
+[![Combo](./doc/combo.svg)](https://combohr.com)
+
 # Changeset
 
 The changeset contains all database operations and events of a command.
@@ -9,6 +11,10 @@ The main reasons are:
 - trigger necessary events once all data is persisted (jobs fail if started before transaction ends)
 
 Whatever the way you organize your code (plain methods, service objects...), you can leverage the changesets.
+
+It helped us solve complex use cases at [Combo](https://combohr.com) where some workflows overlapped.
+
+We had long running transactions, duplicated workers and needed a simple, testable yet robust way to write our persistence layer code.
 
 ## Installation
 
@@ -115,6 +121,10 @@ changeset.add_db_operation(
 ```
 
 Database operations will then be commited in the order they were added to the changeset.
+
+Why not an object responding to call, hence being able to use lambdas?
+
+Because Testability is key for Changesets and we need objects we can easily compare in our tests.
 
 ## Merging changesets
 
