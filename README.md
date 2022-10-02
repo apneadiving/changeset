@@ -12,9 +12,11 @@ The main reasons are:
 
 Whatever the way you organize your code (plain methods, service objects...), you can leverage the changesets.
 
+---
+
 It helped us solve complex use cases at [Combo](https://combohr.com) where some workflows overlapped.
 
-We had long running transactions, duplicated workers and needed a simple, testable yet robust way to write our persistence layer code.
+We had *long running transactions*, *duplicated workers* and needed a **simple**, **testable** yet **robust** way to write our persistence layer code.
 
 ## Installation
 
