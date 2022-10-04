@@ -1,5 +1,16 @@
 [![Combo](./doc/combo.svg)](https://combohr.com)
 
+1. [Installation](#installation)
+1. [Configuration](#configuration)
+1. [Events](#events)
+1. [Database Operations](#database-operations)
+1. [Merging Changesets](#merging-changesets)
+1. [Push!](#push)
+1. [Testing](#testing-)
+1. [Sorbet](#sorbet)
+1. [Example](#example)
+1. [But why all these classes?](#but-why-all-these-classes)
+
 # Changeset
 
 The changeset contains all database operations and events of a command.
