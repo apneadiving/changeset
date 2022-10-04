@@ -1,5 +1,9 @@
 [![Combo](./doc/combo.svg)](https://combohr.com)
 
+<details>
+    <summary> Table of Contents </summary>
+    
+
 1. [Installation](#installation)
 1. [Configuration](#configuration)
 1. [Events](#events)
@@ -10,6 +14,9 @@
 1. [Sorbet](#sorbet)
 1. [Example](#example)
 1. [But why all these classes?](#but-why-all-these-classes)
+
+</details>
+
 
 # Changeset
 
