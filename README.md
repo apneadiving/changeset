@@ -80,8 +80,9 @@ class EventsCatalog
   private
 
   def planning_updated(event)
-    # trigger worker or any async process
-    # from here you can use event.payload
+    # Trigger worker or any async processes.
+    # One event can mean many workers etc, your call.
+    # From here you can use event.payload
   end
 end
 ```
