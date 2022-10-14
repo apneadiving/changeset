@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.description = "Propagate persistence and events from actions"
   spec.license = "MIT"
 
-  spec.files = Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.md"]
+  spec.files = Dir["{lib,rbi}/**/*", "MIT-LICENSE", "Rakefile", "README.md"]
 
   spec.add_dependency "zeitwerk"
 end

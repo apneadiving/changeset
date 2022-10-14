@@ -2,6 +2,7 @@
 
 class Changeset
   EventPayload = T.type_alias { T::Hash[String, T.untyped] }
+  Callable = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void) }
   RawEventPayload = T.type_alias { T.any(EventPayload, T.proc.returns(EventPayload)) }
 
   sig { params(events_catalog: ::Changeset::EventCatalogInterface).void }
@@ -16,11 +17,11 @@ class Changeset
   def add_event(name:, raw_payload:)
   end
 
-  sig { params(persistence_handlers: Changeset::PersistenceInterface).returns(T.self_type) }
+  sig { params(persistence_handlers: Changeset::Callable).returns(T.self_type) }
   def add_db_operations(*persistence_handlers)
   end
 
-  sig { params(persistence_handler: Changeset::PersistenceInterface).returns(T.self_type) }
+  sig { params(persistence_handler: Changeset::Callable).returns(T.self_type) }
   def add_db_operation(persistence_handler)
   end
 
@@ -165,7 +166,7 @@ class Changeset
     abstract!
 
     sig { abstract.void }
-    def commit
+    def call
     end
   end
 
@@ -173,7 +174,7 @@ class Changeset
 
   sig { returns(Changeset::EventCollection) }
   attr_reader :events_collection
-  sig { returns(T::Array[Changeset::PersistenceInterface]) }
+  sig { returns(T::Array[Changeset::Callable]) }
   attr_reader :db_operations
   sig { returns(::Changeset::EventCatalogInterface) }
   attr_reader :events_catalog

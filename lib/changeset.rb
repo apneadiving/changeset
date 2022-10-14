@@ -63,7 +63,7 @@ class Changeset
     # should we move the transaction to also wrap the events?
     # in other words: should we still commit to db if events fail to dispatch?
     Changeset.configuration.db_transaction_wrapper.call do
-      db_operations.each(&:commit)
+      db_operations.each(&:call)
     end
   end
 

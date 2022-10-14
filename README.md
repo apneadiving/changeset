@@ -22,7 +22,7 @@
 
 The changeset contains all database operations and events of a command.
 
-The point of the Changeset is to delay the moment you persist until the end of a chain of method calls. 
+The point of the Changeset is to delay the moment you persist until the end of a chain of method calls.
 
 The main reasons are:
 - use the shortest database transactions possible (holding transactions leads to many errors, nested transactions as well)
@@ -113,7 +113,7 @@ The unicity is based on:
 ## Database Operations
 
 They are meant to be objects containing the relevant logic to call the database and commit persistence operations.
-These classes must match the PersistenceInterface: respond to `commit`.
+These classes must match the PersistenceInterface: respond to `call`.
 
 You can create any depending on your needs: create, update, delete, bulk upsert...
 
@@ -124,7 +124,7 @@ class BasicPersistenceHandler
     @active_record_object = active_record_object
   end
 
-  def commit
+  def call
     @active_record_object.save!
   end
 end
@@ -141,15 +141,20 @@ changeset.add_db_operation(
 )
 ```
 
+If you do not need them to be reused, just use a lambda:
+```
+user = User.new(params)
+
+changeset.add_db_operation(
+  -> {  user.save! }
+)
+```
+
 Database operations will then be commited in the order they were added to the changeset.
-
-Why not an object responding to call, hence being able to use lambdas?
-
-Because Testability is key for Changesets and we need objects we can easily compare in our tests.
 
 ## Merging changesets
 
-The very point of changesets is they can be merged. 
+The very point of changesets is they can be merged.
 
 On merge:
 - parent changeset concatenates all db operations of its child
@@ -310,21 +315,10 @@ class EventsCatalog
   end
 end
 
-# we need a persistence handler
-class BasicPersistenceHandler
-  def initialize(active_record_object)
-    @active_record_object = active_record_object
-  end
-
-  def commit
-    @active_record_object.save!
-  end
-end
-
 def appointment_attended(appointment)
   Changeset.new(EventsCatalog).yield_self do |changeset|
     copay_cents = appointment.service.copay_cents
-    
+
     new_charge, charge_changeset = charge(appointment.customer, copay_cents)
     changeset.merge_child(charge_changeset)
 
@@ -351,8 +345,8 @@ def charge(customer, amount_cents)
 
     changeset
       .add_db_operations(
-        BasicPersistenceHandler.new(invoice),
-        BasicPersistenceHandler.new(charge)
+        -> { invoice.save! },
+        -> { charge.save! }
       )
       .add_event(
         :customer_charged,

@@ -2,7 +2,7 @@
 
 class Changeset
   module PersistenceInterface
-    def commit
+    def call
     end
   end
 end

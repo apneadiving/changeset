@@ -43,8 +43,8 @@ RSpec.describe "Changeset", with_sorbet: false do
 
     changeset.push!
 
-    expect(db_operation1).to have_received(:commit)
-    expect(db_operation2).to have_received(:commit)
+    expect(db_operation1).to have_received(:call)
+    expect(db_operation2).to have_received(:call)
     expect(planning_updated_worker).to have_received(:call).once
   end
 end
