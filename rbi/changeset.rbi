@@ -1,7 +1,7 @@
 # typed: true
 
 class Changeset
-  EventPayload = T.type_alias { T::Hash[String, T.untyped] }
+  EventPayload = T.type_alias { T.untyped }
   Callable = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void) }
   RawEventPayload = T.type_alias { T.any(EventPayload, T.proc.returns(EventPayload)) }
 
@@ -142,11 +142,8 @@ class Changeset
     sig { returns(Changeset::EventCatalogInterface) }
     attr_reader :events_catalog
 
-    sig { returns(Changeset::EventPayload) }
+    sig { returns(Changeset::RawEventPayload) }
     attr_reader :raw_payload
-
-    sig { returns(T.proc.returns(EventPayload)) }
-    attr_reader :raw_payload_proc
   end
 
   class NullEventCatalog

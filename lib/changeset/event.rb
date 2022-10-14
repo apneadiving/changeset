@@ -14,14 +14,7 @@ class Changeset
 
       @name = name
       @events_catalog = events_catalog
-      case raw_payload
-      when Proc
-        @raw_payload = {}
-        @raw_payload_proc = raw_payload
-      else
-        @raw_payload = raw_payload
-        @raw_payload_proc = -> { {} }
-      end
+      @raw_payload = raw_payload
     end
 
     def dispatch
@@ -33,7 +26,11 @@ class Changeset
     end
 
     def payload
-      raw_payload.empty? ? raw_payload_proc.call : raw_payload
+      if raw_payload.is_a?(Proc)
+        raw_payload.call
+      else
+        raw_payload
+      end
     end
 
     def ==(other)
@@ -42,6 +39,6 @@ class Changeset
 
     private
 
-    attr_reader :events_catalog, :raw_payload, :raw_payload_proc
+    attr_reader :events_catalog, :raw_payload
   end
 end
