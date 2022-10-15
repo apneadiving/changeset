@@ -207,6 +207,8 @@ A very convenient aspect of using changesets in you can run multiple scenarios w
 
 In the end you can compare the actual changeset you get against your expected one.
 
+This requires to use real classes for persistence and implement `==` in these. You cannot really get procs to compare for equality.
+
 ## Sorbet
 
 This gem is typed with Sorbet and contains rbi definitions.
