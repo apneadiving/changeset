@@ -215,6 +215,8 @@ This gem is typed with Sorbet and contains rbi definitions.
 
 ## Example
 
+Completely inspired from a discussion on Twitter you can find here: https://twitter.com/davetron5000/status/1575512016504164352
+
 We need to be fault tolerant in cases like below:
 
 ```ruby
