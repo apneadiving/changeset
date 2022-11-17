@@ -38,8 +38,8 @@ RSpec.describe "Changeset", with_sorbet: false do
       db_operation1,
       db_operation2
     )
-    changeset.add_event(name: :planning_updated, raw_payload: {"foo" => 1})
-    changeset.add_event(name: :planning_updated, raw_payload: -> { {"foo" => 1} })
+    changeset.add_event(:planning_updated, {"foo" => 1})
+    changeset.add_event(:planning_updated, -> { {"foo" => 1} })
 
     changeset.push!
 

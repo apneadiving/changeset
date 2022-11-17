@@ -17,7 +17,7 @@ class Changeset
     self
   end
 
-  def add_event(name:, raw_payload:)
+  def add_event(name, raw_payload)
     events_collection.add(name: name, raw_payload: raw_payload, events_catalog: events_catalog)
     self
   end

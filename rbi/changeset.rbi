@@ -14,7 +14,7 @@ class Changeset
   end
 
   sig { params(name: Symbol, raw_payload: Changeset::RawEventPayload).returns(T.self_type) }
-  def add_event(name:, raw_payload:)
+  def add_event(name, raw_payload)
   end
 
   sig { params(persistence_handlers: Changeset::Callable).returns(T.self_type) }
