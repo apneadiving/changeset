@@ -14,7 +14,7 @@ class Changeset
   end
 
   sig { params(changeset_wrapped_in_proc: T.proc.returns(::Changeset)).returns(T.self_type) }
-  def merge_child_async(changeset_wrapped_in_proc)
+  def merge_child_async(&changeset_wrapped_in_proc)
   end
 
   sig { params(name: Symbol, raw_payload: Changeset::RawEventPayload).returns(T.self_type) }
