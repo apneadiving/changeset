@@ -6,6 +6,7 @@ class Changeset
     end
 
     def known_event?(event_name)
+      false
     end
 
     def class
