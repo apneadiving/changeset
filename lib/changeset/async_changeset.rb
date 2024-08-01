@@ -3,6 +3,7 @@
 class Changeset
   class AsyncChangeset
     class InconsistencyError < StandardError; end
+
     def initialize(changeset_wrapped_in_proc)
       @changeset_wrapped_in_proc = changeset_wrapped_in_proc
       @called = false
@@ -19,10 +20,8 @@ class Changeset
     private
 
     def changeset
-      @changeset ||= begin
-        @changeset_wrapped_in_proc.call.tap do |result|
-          raise InconsistencyError unless result.is_a?(::Changeset)
-        end
+      @changeset ||= @changeset_wrapped_in_proc.call.tap do |result|
+        raise InconsistencyError unless result.is_a?(::Changeset)
       end
     end
   end

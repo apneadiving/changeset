@@ -30,9 +30,11 @@ class Changeset
       self
     end
 
+    # standard:disable Style/ArgumentsForwarding
     def each(&block)
       uniq_events.each(&block)
     end
+    # standard:enable Style/ArgumentsForwarding
 
     def ==(other)
       uniq_events == other.uniq_events

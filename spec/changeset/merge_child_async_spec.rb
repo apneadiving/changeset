@@ -101,14 +101,14 @@ RSpec.describe "Changeset Merge Child Async", with_sorbet: false do
         expect(grand_child_changeset_instantiated).to be true
       }
 
-      db_operation5= -> {
+      db_operation5 = -> {
         db_operation5_called = true
         expect(child_changeset_instantiated).to be true
         expect(grand_child_changeset_instantiated).to be true
       }
 
       Changeset.new.add_db_operations(
-        db_operation1,
+        db_operation1
       ).merge_child_async do
         child_changeset_instantiated = true
         Changeset.new
