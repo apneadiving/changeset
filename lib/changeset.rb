@@ -7,13 +7,20 @@ loader.setup
 class Changeset
   def initialize(events_catalog = Changeset::NullEventCatalog.new)
     @events_collection = Changeset::EventCollection.new
-    @db_operations = []
+    @db_operations = ::Changeset::DbOperationCollection.new
     @events_catalog = events_catalog
   end
 
   def merge_child(change_set)
     events_collection.merge_child(change_set.events_collection)
-    db_operations.concat(change_set.db_operations)
+    db_operations.merge_child(change_set.db_operations)
+    self
+  end
+
+  def merge_child_async(&changeset_wrapped_in_proc)
+    async_change_set = ::Changeset::AsyncChangeset.new(changeset_wrapped_in_proc)
+    events_collection.merge_child_async(async_change_set)
+    db_operations.merge_child_async(async_change_set)
     self
   end
 
@@ -30,7 +37,7 @@ class Changeset
   end
 
   def add_db_operation(persistence_handler)
-    db_operations.push(persistence_handler)
+    db_operations.add(persistence_handler)
     self
   end
 
@@ -60,8 +67,6 @@ class Changeset
   private
 
   def commit_db_operations
-    # should we move the transaction to also wrap the events?
-    # in other words: should we still commit to db if events fail to dispatch?
     Changeset.configuration.db_transaction_wrapper.call do
       db_operations.each(&:call)
     end
