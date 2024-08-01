@@ -8,12 +8,12 @@ RSpec.describe Changeset, with_sorbet: false do
       end
 
       def known_event?(event_name)
-        %i[planning_updated].include?(event_name)
+        %i[my_event].include?(event_name)
       end
 
       private
 
-      def planning_updated(event)
+      def my_event(event)
       end
     end
   end
@@ -25,12 +25,12 @@ RSpec.describe Changeset, with_sorbet: false do
       end
 
       def known_event?(event_name)
-        %i[planning_updated].include?(event_name)
+        %i[my_event].include?(event_name)
       end
 
       private
 
-      def planning_updated(event)
+      def my_event(event)
       end
     end
   end
@@ -99,35 +99,35 @@ RSpec.describe Changeset, with_sorbet: false do
 
     context "only events" do
       it "returns true when uniq events with same payload" do
-        changeset1.add_event(:planning_updated, {"foo" => 1})
-        changeset1.add_event(:planning_updated, {"foo" => 1})
+        changeset1.add_event(:my_event, {"foo" => 1})
+        changeset1.add_event(:my_event, {"foo" => 1})
 
-        changeset2.add_event(:planning_updated, {"foo" => 1})
+        changeset2.add_event(:my_event, {"foo" => 1})
 
         expect(changeset1).to eq(changeset2)
       end
 
       # not sure we should do this
       it "returns true when uniq events with same payload (evaluates blocks)" do
-        changeset1.add_event(:planning_updated, {"foo" => 1})
+        changeset1.add_event(:my_event, {"foo" => 1})
 
-        changeset2.add_event(:planning_updated, -> { {"foo" => 1} })
+        changeset2.add_event(:my_event, -> { {"foo" => 1} })
 
         expect(changeset1).to eq(changeset2)
       end
 
       it "returns false when events with different payloads" do
-        changeset1.add_event(:planning_updated, {"foo" => 1})
+        changeset1.add_event(:my_event, {"foo" => 1})
 
-        changeset2.add_event(:planning_updated, {"foo" => 2})
+        changeset2.add_event(:my_event, {"foo" => 2})
 
         expect(changeset1).to_not eq(changeset2)
       end
 
       it "returns false when events with same payload (evaluates blocks)" do
-        changeset1.add_event(:planning_updated, -> { {"foo" => 1} })
+        changeset1.add_event(:my_event, -> { {"foo" => 1} })
 
-        changeset2.add_event(:planning_updated, -> { {"foo" => 2} })
+        changeset2.add_event(:my_event, -> { {"foo" => 2} })
 
         expect(changeset1).to_not eq(changeset2)
       end
@@ -136,9 +136,9 @@ RSpec.describe Changeset, with_sorbet: false do
         let(:changeset2) { Changeset.new(other_event_catalog_klass.new) }
 
         it "returns false event same payload and name" do
-          changeset1.add_event(:planning_updated, {"foo" => 1})
+          changeset1.add_event(:my_event, {"foo" => 1})
 
-          changeset2.add_event(:planning_updated, {"foo" => 1})
+          changeset2.add_event(:my_event, {"foo" => 1})
 
           expect(changeset1).to_not eq(changeset2)
         end

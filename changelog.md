@@ -1,3 +1,6 @@
+# 0.1.3
+- Add `merge_child_async` for legacy code concerns
+
 # 0.1.2
 - Breaking change: `add_event` signature without keyword args
 

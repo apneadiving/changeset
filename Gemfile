@@ -13,10 +13,10 @@ gemspec
 
 # To use a debugger
 # gem 'byebug', group: [:development, :test]
-gem "sorbet-runtime", "0.5.10473"
+gem "sorbet-runtime", "0.5.9204"
 
 group :development, :test do
-  gem "sorbet", "0.5.10473"
+  gem "sorbet", "0.5.9204"
   gem "tapioca", require: false
   gem "standard"
 end

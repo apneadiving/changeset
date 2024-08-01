@@ -13,6 +13,10 @@ class Changeset
   def merge_child(change_set)
   end
 
+  sig { params(changeset_wrapped_in_proc: T.proc.returns(::Changeset)).returns(T.self_type) }
+  def merge_child_async(&changeset_wrapped_in_proc)
+  end
+
   sig { params(name: Symbol, raw_payload: Changeset::RawEventPayload).returns(T.self_type) }
   def add_event(name, raw_payload)
   end
@@ -69,6 +73,53 @@ class Changeset
     end
   end
 
+  class AsyncChangeset
+    sig { params(changeset_wrapped_in_proc: T.proc.returns(::Changeset)).void }
+    def initialize(changeset_wrapped_in_proc)
+    end
+
+    sig { returns(DbOperationCollection) }
+    def db_operations
+    end
+
+    sig { returns(EventCollection) }
+    def events_collection
+    end
+  end
+
+  class DbOperationCollection
+    CollectionElement = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void, Changeset::AsyncChangeset) }
+
+    sig { void }
+    def initialize
+    end
+
+    sig { params(persistence_handler: CollectionElement).void }
+    def add(persistence_handler)
+    end
+
+    sig { params(db_operations: Changeset::DbOperationCollection).void }
+    def merge_child(db_operations)
+    end
+
+    sig { params(async_change_set: Changeset::AsyncChangeset).void }
+    def merge_child_async(async_change_set)
+    end
+
+    sig { params(block: T.proc.params(arg0: Changeset::Callable).returns(BasicObject)).void }
+    def each(&block)
+    end
+
+    sig { params(other: Changeset::DbOperationCollection).returns(T::Boolean) }
+    def ==(other)
+    end
+
+    protected
+
+    sig { returns(T::Array[CollectionElement]) }
+    attr_reader :collection
+  end
+
   class EventCollection
     GroupedEvent = T.type_alias { T::Hash[Symbol, T::Array[Changeset::Event]] }
 
@@ -84,7 +135,11 @@ class Changeset
     def merge_child(event_collection)
     end
 
-    sig { params(block: T.proc.params(arg0: Changeset::Event).returns(BasicObject)).returns(T::Enumerable[Changeset::Event]) }
+    sig { params(async_change_set: Changeset::AsyncChangeset).void }
+    def merge_child_async(async_change_set)
+    end
+
+    sig { params(block: T.proc.params(arg0: Changeset::Event).returns(BasicObject)).void }
     def each(&block)
     end
 
@@ -96,6 +151,8 @@ class Changeset
 
     sig { returns(GroupedEvent) }
     attr_reader :grouped_events
+    sig { returns(T::Array[::Changeset::AsyncChangeset]) }
+    attr_reader :async_change_sets
 
     # only used for merge
     sig { returns(T::Array[Changeset::Event]) }
@@ -168,11 +225,10 @@ class Changeset
   end
 
   protected
-
+  sig { returns(Changeset::DbOperationCollection) }
+  attr_reader :db_operations
   sig { returns(Changeset::EventCollection) }
   attr_reader :events_collection
-  sig { returns(T::Array[Changeset::Callable]) }
-  attr_reader :db_operations
   sig { returns(::Changeset::EventCatalogInterface) }
   attr_reader :events_catalog
 

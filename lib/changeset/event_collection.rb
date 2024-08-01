@@ -4,6 +4,7 @@ class Changeset
   class EventCollection
     def initialize
       @grouped_events = {}
+      @async_change_sets = []
     end
 
     def add(name:, raw_payload:, events_catalog:)
@@ -19,11 +20,21 @@ class Changeset
       event_collection.all_events.each do |event|
         add_event(event)
       end
+      event_collection.async_change_sets.each do |async_change_set|
+        async_change_sets.push(async_change_set)
+      end
     end
 
+    def merge_child_async(async_change_set)
+      async_change_sets.push(async_change_set)
+      self
+    end
+
+    # standard:disable Style/ArgumentsForwarding
     def each(&block)
       uniq_events.each(&block)
     end
+    # standard:enable Style/ArgumentsForwarding
 
     def ==(other)
       uniq_events == other.uniq_events
@@ -31,7 +42,7 @@ class Changeset
 
     protected
 
-    attr_reader :grouped_events
+    attr_reader :grouped_events, :async_change_sets
 
     # only used for merge
     def all_events
@@ -42,7 +53,14 @@ class Changeset
       end
     end
 
+    # called after push through #each
     def uniq_events
+      async_change_sets.each do |async_change_set|
+        async_change_set.events_collection.each do |event|
+          add_event(event)
+        end
+      end
+
       [].tap do |collection|
         grouped_events.each_value do |events|
           collection.concat(events.uniq { |event| event.unicity_key })
