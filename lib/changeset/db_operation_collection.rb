@@ -2,6 +2,8 @@
 
 class Changeset
   class DbOperationCollection
+    include Enumerable
+
     def initialize
       @collection = []
     end
