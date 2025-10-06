@@ -1,3 +1,6 @@
+# 0.1.5
+- Make commit_db_operations and dispatch_events public
+
 # 0.1.4
 - Make DbOperationCollection an enumerable
 
