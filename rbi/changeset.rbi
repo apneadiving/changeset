@@ -33,6 +33,14 @@ class Changeset
   def push!
   end
 
+  sig { void }
+  def commit_db_operations
+  end
+
+  sig { void }
+  def dispatch_events
+  end
+
   sig { params(other: Changeset).returns(T::Boolean) }
   def ==(other)
   end
@@ -231,14 +239,4 @@ class Changeset
   attr_reader :events_collection
   sig { returns(::Changeset::EventCatalogInterface) }
   attr_reader :events_catalog
-
-  private
-
-  sig { void }
-  def commit_db_operations
-  end
-
-  sig { void }
-  def dispatch_events
-  end
 end

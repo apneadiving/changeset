@@ -47,6 +47,18 @@ class Changeset
     self
   end
 
+  def commit_db_operations
+    Changeset.configuration.db_transaction_wrapper.call do
+      db_operations.each(&:call)
+    end
+  end
+
+  def dispatch_events
+    events_collection.each do |event|
+      event.dispatch
+    end
+  end
+
   def ==(other)
     db_operations == other.db_operations &&
       events_collection == other.events_collection
@@ -63,18 +75,4 @@ class Changeset
   protected
 
   attr_reader :events_collection, :db_operations, :events_catalog
-
-  private
-
-  def commit_db_operations
-    Changeset.configuration.db_transaction_wrapper.call do
-      db_operations.each(&:call)
-    end
-  end
-
-  def dispatch_events
-    events_collection.each do |event|
-      event.dispatch
-    end
-  end
 end
