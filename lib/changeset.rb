@@ -48,11 +48,11 @@ class Changeset
     @merged
   end
 
-  def push!
+  def push!(skip_transaction_check: false)
     raise Changeset::Errors::AlreadyPushedError, "this changeset has already been pushed" if @pushed
     raise Changeset::Errors::AlreadyMergedError, "cannot push a changeset that has been merged into a parent" if @merged
 
-    check_not_already_in_transaction!
+    check_not_already_in_transaction! unless skip_transaction_check
     @pushed = true
     commit_db_operations
     dispatch_events

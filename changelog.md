@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.1
+- Add `push!(skip_transaction_check: true)` to bypass `already_in_transaction` guard when needed
+
 ## 0.2.0
 - **Breaking:** Remove `merge_child_async` and `AsyncChangeset` from the gem. This was a legacy escape hatch — if you need it, monkeypatch it in your app.
 - Add double-push protection: `push!` raises `AlreadyPushedError` if called twice on the same changeset

@@ -33,8 +33,8 @@ class Changeset
   def add_db_operation(persistence_handler)
   end
 
-  sig { returns(T.self_type) }
-  def push!
+  sig { params(skip_transaction_check: T::Boolean).returns(T.self_type) }
+  def push!(skip_transaction_check: false)
   end
 
   sig { void }

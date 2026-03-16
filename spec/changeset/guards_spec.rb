@@ -111,5 +111,16 @@ RSpec.describe "Changeset Guards", with_sorbet: false do
 
       expect { changeset.push! }.not_to raise_error
     end
+
+    it "does not raise when skip_transaction_check is true" do
+      Changeset.configure do |config|
+        config.db_transaction_wrapper = ->(&block) { block.call }
+        config.already_in_transaction = -> { true }
+      end
+
+      changeset = Changeset.new
+
+      expect { changeset.push!(skip_transaction_check: true) }.not_to raise_error
+    end
   end
 end

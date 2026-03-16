@@ -34,6 +34,7 @@ RSpec.describe "Changeset Merge Child", with_sorbet: false do
   before do
     Changeset.configure do |config|
       config.db_transaction_wrapper = ->(&block) { block.call }
+      config.already_in_transaction = nil
     end
   end
 

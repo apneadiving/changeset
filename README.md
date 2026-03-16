@@ -355,7 +355,7 @@ This requires your persistence classes to implement `==`. Lambdas can't be compa
 - If any DB operation raises, the transaction rolls back and no events dispatch.
 - DB operations execute in insertion order. Events deduplicate, then dispatch in insertion order.
 - A changeset can only be pushed once — the second `push!` raises `AlreadyPushedError`.
-- If `already_in_transaction` is configured and returns true, `push!` raises `AlreadyInTransactionError` before executing anything.
+- If `already_in_transaction` is configured and returns true, `push!` raises `AlreadyInTransactionError` before executing anything. You can bypass this with `push!(skip_transaction_check: true)` for cases where you intentionally push inside a transaction (e.g., inside an advisory lock that opens one).
 
 ## Sorbet
 
