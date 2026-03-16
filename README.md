@@ -2,9 +2,11 @@
 
 # Changeset
 
-A unit-of-work primitive for Rails: collect DB operations, collect events, execute in one transaction, dispatch events after commit.
+A unit-of-work primitive for Rails that separates domain logic from persistence. Your services decide *what* to persist and *which events* to fire — the changeset decides *when*, in a single transaction, with events dispatched after commit.
 
-> **Note on naming:** This is not related to Ecto changesets (Elixir). This gem implements a unit-of-work pattern with event dispatch — it collects persistence operations and side effects, then executes them in a controlled sequence.
+If you're drawn to hexagonal architecture (ports and adapters) but don't want a framework, this is the minimum viable boundary: domain logic in, side effects out, one seam between the two.
+
+> **Note on naming:** This is not related to Ecto changesets (Elixir). This gem implements a unit-of-work pattern with event dispatch.
 
 ---
 
@@ -21,6 +23,7 @@ A unit-of-work primitive for Rails: collect DB operations, collect events, execu
    - [Merging Changesets](#merging-changesets)
    - [Push!](#push)
 1. [Real-World Patterns](#real-world-patterns)
+   - [Separating Reads from Writes](#separating-reads-from-writes)
 1. [Testing](#testing)
 1. [Transaction Semantics](#transaction-semantics)
 1. [Sorbet](#sorbet)
@@ -291,6 +294,43 @@ end
 # One transaction for all three services, events dispatched after
 appointment_attended(appointment).push!
 ```
+
+### Separating reads from writes
+
+A changeset naturally pushes your services toward a clean structure: read first, build the changeset, push at the boundary. No reads happen inside the transaction, no writes happen outside it.
+
+```ruby
+class Appointment::AttendService
+  def initialize(appointment:)
+    @appointment = appointment
+    @changeset = Changeset.new(Appointment::EventsCatalog.new)
+  end
+
+  def call
+    # 1. Read phase — queries, validations, business logic (no transaction)
+    charge = Charge.build_for(@appointment)
+    next_slot = @appointment.location.next_available_slot
+    raise "no availability" unless next_slot
+
+    # 2. Build phase — collect what needs to happen (still no transaction)
+    @changeset
+      .add_db_operations(
+        -> { charge.save! },
+        -> { @appointment.update!(status: :attended, next_slot: next_slot) }
+      )
+      .add_event(:appointment_attended, -> { { id: @appointment.id, charge_id: charge.id } })
+
+    @changeset
+  end
+end
+
+# 3. Push phase — single transaction, events after commit
+Appointment::AttendService.new(appointment: appointment).call.push!
+```
+
+The transaction only wraps the writes. Reads stay outside. This keeps locks short and makes the service easy to test — you can assert on the changeset without ever calling `push!`.
+
+If you're familiar with hexagonal architecture (ports and adapters), the changeset is the boundary between your domain logic and your persistence/infrastructure layer. The read and build phases are pure domain — no side effects. The push phase is the adapter. The gem doesn't enforce this, but it makes it the path of least resistance.
 
 ## Testing
 

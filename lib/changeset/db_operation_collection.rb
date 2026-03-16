@@ -18,9 +18,11 @@ class Changeset
       end
     end
 
-    def each(&)
-      collection.each(&)
+    # standard:disable Style/ArgumentsForwarding
+    def each(&block)
+      collection.each(&block)
     end
+    # standard:enable Style/ArgumentsForwarding
 
     def ==(other)
       collection == other.collection

@@ -58,7 +58,7 @@ class Changeset
   end
 
   class Configuration
-    DbTransactionWrapper = T.type_alias { T.proc.params(block: T.proc.void).void }
+    DbTransactionWrapper = T.type_alias { T.untyped }
     TransactionChecker = T.type_alias { T.proc.returns(T::Boolean) }
 
     sig { params(db_transaction_wrapper: DbTransactionWrapper).returns(DbTransactionWrapper) }
