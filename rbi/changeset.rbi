@@ -9,12 +9,16 @@ class Changeset
   def initialize(events_catalog = Changeset::NullEventCatalog.new)
   end
 
-  sig { params(change_set: Changeset).returns(T.self_type) }
-  def merge_child(change_set)
+  sig { returns(T::Boolean) }
+  def pushed?
   end
 
-  sig { params(changeset_wrapped_in_proc: T.proc.returns(::Changeset)).returns(T.self_type) }
-  def merge_child_async(&changeset_wrapped_in_proc)
+  sig { returns(T::Boolean) }
+  def merged?
+  end
+
+  sig { params(child_changeset: Changeset).returns(T.self_type) }
+  def merge_child(child_changeset)
   end
 
   sig { params(name: Symbol, raw_payload: Changeset::RawEventPayload).returns(T.self_type) }
@@ -55,12 +59,20 @@ class Changeset
 
   class Configuration
     DbTransactionWrapper = T.type_alias { T.proc.params(block: T.proc.void).void }
+    TransactionChecker = T.type_alias { T.proc.returns(T::Boolean) }
 
     sig { params(db_transaction_wrapper: DbTransactionWrapper).returns(DbTransactionWrapper) }
     attr_writer :db_transaction_wrapper
 
-    sig { returns(T.proc.void) }
+    sig { params(already_in_transaction: TransactionChecker).returns(TransactionChecker) }
+    attr_writer :already_in_transaction
+
+    sig { returns(DbTransactionWrapper) }
     def db_transaction_wrapper
+    end
+
+    sig { returns(T.nilable(TransactionChecker)) }
+    def already_in_transaction
     end
   end
 
@@ -81,37 +93,19 @@ class Changeset
     end
   end
 
-  class AsyncChangeset
-    sig { params(changeset_wrapped_in_proc: T.proc.returns(::Changeset)).void }
-    def initialize(changeset_wrapped_in_proc)
-    end
-
-    sig { returns(DbOperationCollection) }
-    def db_operations
-    end
-
-    sig { returns(EventCollection) }
-    def events_collection
-    end
-  end
-
   class DbOperationCollection
-    CollectionElement = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void, Changeset::AsyncChangeset) }
+    include Enumerable
 
     sig { void }
     def initialize
     end
 
-    sig { params(persistence_handler: CollectionElement).void }
+    sig { params(persistence_handler: Changeset::Callable).void }
     def add(persistence_handler)
     end
 
     sig { params(db_operations: Changeset::DbOperationCollection).void }
     def merge_child(db_operations)
-    end
-
-    sig { params(async_change_set: Changeset::AsyncChangeset).void }
-    def merge_child_async(async_change_set)
     end
 
     sig { params(block: T.proc.params(arg0: Changeset::Callable).returns(BasicObject)).void }
@@ -124,7 +118,7 @@ class Changeset
 
     protected
 
-    sig { returns(T::Array[CollectionElement]) }
+    sig { returns(T::Array[Changeset::Callable]) }
     attr_reader :collection
   end
 
@@ -143,10 +137,6 @@ class Changeset
     def merge_child(event_collection)
     end
 
-    sig { params(async_change_set: Changeset::AsyncChangeset).void }
-    def merge_child_async(async_change_set)
-    end
-
     sig { params(block: T.proc.params(arg0: Changeset::Event).returns(BasicObject)).void }
     def each(&block)
     end
@@ -159,8 +149,6 @@ class Changeset
 
     sig { returns(GroupedEvent) }
     attr_reader :grouped_events
-    sig { returns(T::Array[::Changeset::AsyncChangeset]) }
-    attr_reader :async_change_sets
 
     # only used for merge
     sig { returns(T::Array[Changeset::Event]) }

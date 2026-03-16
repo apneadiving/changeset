@@ -1,50 +1,64 @@
 [![Combo](./doc/combo.svg)](https://combohr.com)
 
-<details>
-    <summary> Table of Contents </summary>
-    
-
-1. [Installation](#installation)
-1. [Configuration](#configuration)
-1. [Events](#events)
-1. [Database Operations](#database-operations)
-1. [Merging Changesets](#merging-changesets)
-1. [Push!](#push)
-1. [Testing](#testing-)
-1. [Sorbet](#sorbet)
-1. [Example](#example)
-1. [But why all these classes?](#but-why-all-these-classes)
-
-</details>
-
-
 # Changeset
 
-The changeset contains all database operations and events of a command.
+A unit-of-work primitive for Rails: collect DB operations, collect events, execute in one transaction, dispatch events after commit.
 
-The point of the Changeset is to delay the moment you persist until the end of a chain of method calls.
-
-The main reasons are:
-- use the shortest database transactions possible (holding transactions leads to many errors, nested transactions as well)
-- trigger necessary events once all data is persisted (jobs fail if started before transaction ends)
-
-Whatever the way you organize your code (plain methods, service objects...), you can leverage the changesets.
+> **Note on naming:** This is not related to Ecto changesets (Elixir). This gem implements a unit-of-work pattern with event dispatch — it collects persistence operations and side effects, then executes them in a controlled sequence.
 
 ---
 
-It helped us solve complex use cases at [Combo](https://combohr.com) where some workflows overlapped.
+<details>
+<summary>Table of Contents</summary>
 
-We had *long running transactions*, *duplicated workers* and needed a **simple**, **testable** yet **robust** way to write our persistence layer code.
+1. [The Problem](#the-problem)
+1. [How It Works](#how-it-works)
+1. [Installation](#installation)
+1. [Configuration](#configuration)
+1. [Usage](#usage)
+   - [Events](#events)
+   - [Database Operations](#database-operations)
+   - [Merging Changesets](#merging-changesets)
+   - [Push!](#push)
+1. [Real-World Patterns](#real-world-patterns)
+1. [Testing](#testing)
+1. [Transaction Semantics](#transaction-semantics)
+1. [Sorbet](#sorbet)
+
+</details>
+
+## The Problem
+
+Rails service objects tend to accumulate three issues over time:
+
+**Interminable transactions.** Service A opens a transaction, calls service B which opens a nested transaction, which calls service C. The transaction scope becomes unknowable, and you're holding database locks far longer than necessary.
+
+**Unpredictable callbacks.** `after_save` and `after_commit` callbacks scattered across models fire in hard-to-trace order. When workflows overlap, the same callback can trigger duplicate side effects.
+
+**Jobs that run too early.** A background job enqueued inside a transaction can start before the transaction commits — and fail because the records don't exist yet.
+
+The changeset solves all three by separating *what to persist* from *when to persist*, and *what side effects to trigger* from *when to trigger them*.
+
+## How It Works
+
+```
+1. Collect DB operations       →  changeset.add_db_operation(...)
+2. Collect events              →  changeset.add_event(...)
+3. Compose from sub-services   →  changeset.merge_child(child_changeset)
+4. Execute                     →  changeset.push!
+   a. All DB operations run in a single transaction
+   b. All events dispatch after the transaction commits
+```
 
 ## Installation
 
 ```ruby
-git_source(:github) { |project| File.join("https://github.com", "#{project}.git") }
 gem "changeset", github: "apneadiving/changeset"
 ```
 
 ## Configuration
-One configuration is needed to use the gem: tell it how to use database transactions:
+
+Tell the gem how to wrap database transactions:
 
 ```ruby
 Changeset.configure do |config|
@@ -56,19 +70,31 @@ Changeset.configure do |config|
 end
 ```
 
-## Events
+This is the only required configuration. The gem does not force `requires_new: true` or any other transaction option — that's your choice in the wrapper.
 
-They are meant to trigger only async processes:
-- background jobs
-- AMQP
-- KAFKA
-- ...
+Optionally, you can detect when `push!` is called inside an already-open transaction — which defeats the purpose of the gem:
 
-Events have to be registered in a class to be used later:
+```ruby
+Changeset.configure do |config|
+  config.db_transaction_wrapper = ->(&block) { ApplicationRecord.transaction { block.call } }
+  config.already_in_transaction = -> { ActiveRecord::Base.connection.open_transactions > 0 }
+end
+```
+
+When configured, `push!` raises `Changeset::Errors::AlreadyInTransactionError` if the check returns true. This is a no-cost check (in-memory counter, no DB call). When not configured, no check runs.
+
+## Usage
+
+### Events
+
+Events trigger async processes (background jobs, AMQP, Kafka, etc.) after the transaction commits.
+
+Events must be registered in an event catalog — any object that implements `dispatch(event)` and `known_event?(event_name)`:
 
 ```ruby
 class EventsCatalog
   KNOWN_EVENTS = [:planning_updated]
+
   def dispatch(event)
     send(event.name, event)
   end
@@ -80,298 +106,223 @@ class EventsCatalog
   private
 
   def planning_updated(event)
-    # Trigger workers or any async processes.
-    # One event can mean many workers etc, your call.
-    # From here you can use event.payload
+    PlanningUpdatedJob.perform_async(event.payload)
   end
 end
 ```
 
-There are two ways to add events to a changeset:
+Add events with a static payload (when you know all params upfront):
+
 ```ruby
-changeset = Changeset.new(EventsCatalog)
-# if you know all params at the time you add the event:
-changeset.add_event(
-  :planning_udpated,
-  { week: "2022W47" }
-)
-# if you do not know all params at the time you add the event,
-# but know it will be populated once database operations are committed
-changeset.add_event(
-  :planning_udpated,
-  -> { { week: some_object.week_identifier } }
+changeset = Changeset.new(EventsCatalog.new)
+changeset.add_event(:planning_updated, { week: "2022W47" })
+```
+
+Or with a proc payload (when the payload depends on data created during the transaction):
+
+```ruby
+changeset.add_event(:planning_updated, -> { { week: some_object.week_identifier } })
+```
+
+Proc payloads are evaluated after DB operations commit, so they can reference newly created records.
+
+**Deduplication:** Events are deduplicated by `[event_catalog_class, event_name, payload]`. If multiple services add the same event with the same payload, it dispatches once.
+
+### Database Operations
+
+Any object that responds to `call` works as a DB operation:
+
+```ruby
+changeset.add_db_operation(-> { user.save! })
+```
+
+Add multiple at once:
+
+```ruby
+changeset.add_db_operations(
+  -> { invoice.save! },
+  -> { charge.save! }
 )
 ```
 
-For now there is a dedup mechanism to avoid same events to be dispatched several times. Indeed some actions may add same events in their own context and afeter traversing them all we know it is not necessary.
+Operations execute in the order they were added, within a single transaction.
 
-The unicity is based on:
-- the event catalog class name
-- the name of the event
-- the payload of the event
+### Merging Changesets
 
-## Database Operations
+Changesets compose. A parent can merge any number of children:
 
-They are meant to be objects containing the relevant logic to call the database and commit persistence operations.
-These classes must match the PersistenceInterface: respond to `call`.
-
-You can create any depending on your needs: create, update, delete, bulk upsert...
-
-A very basic example is:
 ```ruby
-class BasicPersistenceHandler
-  def initialize(active_record_object)
-    @active_record_object = active_record_object
+parent_changeset = Changeset.new(EventsCatalog.new)
+parent_changeset.add_db_operation(db_operation1)
+
+child_changeset = Changeset.new(EventsCatalog.new)
+child_changeset
+  .add_db_operation(db_operation2)
+  .add_event(:planning_updated, { week: "2022W47" })
+
+parent_changeset.merge_child(child_changeset)
+parent_changeset.add_db_operation(db_operation3)
+
+parent_changeset.push!
+# DB operations execute in order: 1, 2, 3
+# Events deduplicate and dispatch after commit
+```
+
+This is the core value: each service builds its own changeset, and the caller merges them. No service needs to know whether it's running inside a transaction or not.
+
+### Push!
+
+```ruby
+changeset.push!
+```
+
+This does two things in sequence:
+1. Runs all DB operations in a single transaction (`commit_db_operations`)
+2. Dispatches all unique events outside the transaction (`dispatch_events`)
+
+A changeset can only be pushed once. Calling `push!` a second time raises `Changeset::Errors::AlreadyPushedError`.
+
+Both `commit_db_operations` and `dispatch_events` are public if you need to call them separately. Note: these bypass the double-push guard — they're escape hatches, not the normal path.
+
+## Real-World Patterns
+
+The gem is deliberately minimal — it doesn't enforce how you structure your code. Here are patterns that have emerged in production across hundreds of files.
+
+### Services return changesets, callers push
+
+The most common pattern: services build and return a changeset, the caller decides when to push. This keeps transaction boundaries at the edges.
+
+```ruby
+class Location::CreationService
+  def initialize(account:, params:)
+    @account = account
+    @params = params
+    @changeset = Changeset.new(Location::EventsCatalog.new)
   end
 
   def call
-    @active_record_object.save!
+    @location = Location.new(@params)
+    @changeset
+      .add_db_operation(-> { @location.save! })
+      .add_event(:location_created, -> { { id: @location.id } })
+  end
+
+  # Convenience method when the caller doesn't need the changeset
+  def self.run!(account:, params:)
+    service = new(account: account, params: params)
+    service.call.push!
+    service.location
   end
 end
+
+# Caller can push directly:
+Location::CreationService.run!(account: account, params: params)
+
+# Or merge into a larger workflow:
+changeset.merge_child(Location::CreationService.new(account: account, params: params).call)
 ```
 
-You can then add database operations to the changeset.
-```ruby
-changeset = Changeset.new # notice we didnt pass an event catalog because we wont use events
+### One event catalog per domain
 
-user = User.new(params)
+Each bounded context defines its own catalog. When changesets from different domains merge, each event dispatches through its own catalog:
+
+```ruby
+class Location::EventsCatalog
+  KNOWN_EVENTS = [:location_created, :location_updated, :location_deleted]
+  # ...
+end
+
+class Membership::EventsCatalog
+  KNOWN_EVENTS = [:membership_created, :membership_changed]
+  # ...
+end
+
+# A user creation service might compose both:
+changeset = Changeset.new(User::EventsCatalog.new)
+changeset
+  .add_event(:user_created, -> { { id: user.id } })
+  .merge_child(membership_service.call)   # uses Membership::EventsCatalog
+  .merge_child(location_config_service.call) # uses Location::EventsCatalog
+  .push!
+# Each event dispatches through its own catalog
+```
+
+### Persistence classes that carry state
+
+For complex operations, a dedicated class beats a lambda. It can encapsulate multi-step logic and expose results:
+
+```ruby
+class Shift::BulkCreate::Persistence
+  include Changeset::PersistenceInterface
+
+  def initialize(shifts:, planning:)
+    @shifts = shifts
+    @planning = planning
+  end
+
+  def call
+    Shift.import!(@shifts)
+    @planning.update!(shifts_count: @planning.shifts_count + @shifts.size)
+  end
+end
 
 changeset.add_db_operation(
-  BasicPersistenceHandler.new(user)
+  Shift::BulkCreate::Persistence.new(shifts: shifts, planning: planning)
 )
 ```
 
-If you do not need them to be reused, just use a lambda:
-```
-user = User.new(params)
+### Chaining merge_child across services
 
-changeset.add_db_operation(
-  -> {  user.save! }
-)
-```
-
-Database operations will then be commited in the order they were added to the changeset.
-
-## Merging changesets
-
-The very point of changesets is they can be merged.
-
-On merge:
-- parent changeset concatenates all db operations of its child
-- parent changeset merges all events from its child
+Complex workflows merge changesets from multiple services. Each service is unaware of the others:
 
 ```ruby
-parent_changeset = Changeset.new(EventsCatalog)
-parent_changeset
-  .add_db_operations(
-    db_operation1,
-    db_operation2
-  )
-  .add_event(:planning_updated, { week: "2022W47" })
+def appointment_attended(appointment)
+  changeset = Changeset.new(Appointment::EventsCatalog.new)
 
-child_changeset = Changeset.new(EventsCatalog)
-  .add_db_operations(
-    db_operation3,
-    db_operation4
-  )
-  .add_event(:planning_updated, { week: "2022W47" })
-  .add_event(:planning_updated, { week: "2022W48" })
+  # Each service returns its own changeset with its own events
+  changeset
+    .merge_child(charge_service.call)
+    .merge_child(insurance_claim_service.call)
+    .merge_child(notification_service.call)
 
-parent_changeset.merge_child(child_changeset)
+  changeset
+end
 
-parent_changeset
-  .add_db_operation(
-    db_operation5
-  )
-
-# - db operations will be in order 1, 2, 3, 4, 5
-# - only one planning_updated event will be dispatched with param {week: "2022W47"}
-# - only one planning_updated event will be dispatched with param {week: "2022W48"}
+# One transaction for all three services, events dispatched after
+appointment_attended(appointment).push!
 ```
 
-## Push!
+## Testing
 
-At the end of the calls chain, it is the appropriate time to persist data and trigger events:
+Changesets can be compared without touching the database:
 
 ```ruby
-changeset.push!
+expected = Changeset.new(EventsCatalog.new)
+  .add_db_operation(CreateUser.new(user))
+  .add_event(:user_created, { id: 1 })
+
+actual = my_service.call
+
+expect(actual).to eq(expected)
 ```
 
-This will:
-- persist all database operations in a single transaction
-- then trigger all events (outside the transaction)
+This requires your persistence classes to implement `==`. Lambdas can't be compared for equality, so use real classes in tests.
 
-## Testing ⚡
+## Transaction Semantics
 
-A very convenient aspect of using changesets in you can run multiple scenarios without touching the database.
-
-In the end you can compare the actual changeset you get against your expected one.
-
-This requires to use real classes for persistence and implement `==` in these. You cannot really get procs to compare for equality.
+- The `db_transaction_wrapper` you configure receives a block. All DB operations run inside that block. You control the transaction options (isolation level, `requires_new`, etc.).
+- Events dispatch **after** the wrapper block returns — outside the transaction. This guarantees that background jobs can find the records they need.
+- If any DB operation raises, the transaction rolls back and no events dispatch.
+- DB operations execute in insertion order. Events deduplicate, then dispatch in insertion order.
+- A changeset can only be pushed once — the second `push!` raises `AlreadyPushedError`.
+- If `already_in_transaction` is configured and returns true, `push!` raises `AlreadyInTransactionError` before executing anything.
 
 ## Sorbet
 
-This gem is typed with Sorbet and contains rbi definitions.
+This gem is typed with Sorbet and ships with RBI definitions.
 
-## Example
+## Why a gem?
 
-Completely inspired from a discussion on Twitter you can find here: https://twitter.com/davetron5000/status/1575512016504164352
+The core logic is ~100 lines — you could inline it. The value isn't the implementation, it's the shared primitive. A named abstraction that the whole team reaches for beats ten ad-hoc transaction wrappers scattered across a codebase. Without it, every developer invents their own "collect stuff, run in transaction, fire jobs after" pattern. Some use `after_commit`, some nest transactions, some enqueue jobs inside transactions. The codebase drifts. With a changeset, there's one answer: build it, push it.
 
-We need to be fault tolerant in cases like below:
-
-```ruby
-def charge(customer, amount_cents)
-  # These two create! calls must
-  # either both succeed or both fail
-  invoice = Invoice.create!(
-    customer: customer,
-    amount_cents: amount_cents,
-  )
-  charge = Charge.create!(
-    invoice: invoice,
-    amount_cents: amount_cents,
-  )
-  ChargeJob.perform_async(charge.id)
-end
-```
-
-It generally goes down to adding a transaction:
-
-```ruby
-def charge(customer, amount_cents)
-  ActiveRecord::Base.transaction do
-    invoice = Invoice.create!(
-      customer: customer,
-      amount_cents: amount_cents,
-    )
-    charge = Charge.create!(
-      invoice: invoice,
-      amount_cents: amount_cents,
-    )
-  end
-  # we can argue whether or not this should go inside the transaction...
-  ChargeJob.perform_async(charge.id)
-end
-```
-
-You soon need to reuse this method in a larger context, and you now need to nest transactions:
-
-```ruby
-def appointment_attended(appointment)
-  ActiveRecord::Base.transaction(requires_new: true) do
-    copay_cents = appointment.service.copay_cents
-    charge = charge(appointment.customer, copay_cents)
-
-    # create_insurance_claim would create yet another nested transaction
-    insurance_claim = create_insurance_claim(appointment, copay: charge)
-  end
-  # again, triggering the job here is maybe not the best option
-  SubmitToInsuranceJob.perform_async(insurance_claim.id)
-end
-
-def charge(customer, amount_cents)
-  ActiveRecord::Base.transaction(requires_new: true) do
-    invoice = Invoice.create!(
-      customer: customer,
-      amount_cents: amount_cents,
-    )
-    charge = Charge.create!(
-      invoice: invoice,
-      amount_cents: amount_cents,
-    )
-  end
-  # we can argue whether or not this should go inside the transaction...
-  ChargeJob.perform_async(charge.id)
-end
-```
-
-As you can tell, we are putting more and more weight on the transation.
-Holding a transaction takes a huge toll on your database opening the door to multiple weird errors.
-The most common ones being:
-- timeouts
-- locking errors
-- background job failing because they are unable to find database records (they can actually be trigerred before the transaction ended)
-
----
-
-Now with the Changeset:
-
-```ruby
-# we need a catalog
-class EventsCatalog
-  KNOWN_EVENTS = [:customer_charged, :insurance_claim_created]
-  def dispatch(event)
-    send(event.name, event)
-  end
-
-  def known_event?(event_name)
-    KNOWN_EVENTS.include?(event_name)
-  end
-
-  private
-
-  def customer_charged(event)
-    ChargeJob.perform_async(event.payload[:id])
-  end
-
-  def insurance_claim_created(event)
-    SubmitToInsuranceJob.perform_async(event.payload[:id])
-  end
-end
-
-def appointment_attended(appointment)
-  Changeset.new(EventsCatalog).yield_self do |changeset|
-    copay_cents = appointment.service.copay_cents
-
-    new_charge, charge_changeset = charge(appointment.customer, copay_cents)
-    changeset.merge_child(charge_changeset)
-
-    insurance_claim, insurance_claim_changeset = create_insurance_claim(appointment, copay: new_charge)
-    changeset.merge_child(insurance_claim_changeset)
-
-    changeset.add_event(
-      :insurance_claim_created,
-      -> { { id: insurance_claim.id } }
-    )
-  end
-end
-
-def charge(customer, amount_cents)
-  Changeset.new(EventsCatalog).yield_self do |changeset|
-    invoice = Invoice.new(
-      customer: customer,
-      amount_cents: amount_cents
-    )
-    charge = Charge.new(
-      invoice: invoice,
-      amount_cents: amount_cents
-    )
-
-    changeset
-      .add_db_operations(
-        -> { invoice.save! },
-        -> { charge.save! }
-      )
-      .add_event(
-        :customer_charged,
-        -> { { id: charge.id } }
-      )
-
-    [charge, changeset]
-  end
-end
-
-# usage
-changeset = appointment_attended(appointment)
-changeset.push!
-```
-
-One database transaction, workers triggered at the appropriate time.
-
-## But why all these classes?
-
-I realized this kind of structure was necessary through my job at combohr.com, where we heavily use Domain Driven Design.
-
-Because we do not use ActiveRecord within the domain (no objects, no query, no nothing), we need a way to bridge back from our own Ruby object to the persistence layer. This is where Persistence classes came into play.
-
-Anyway it is a good habit to have a facade to decouple your intent and the actual implementation.
+This gem is intentionally small and stable. Low commit frequency reflects maturity, not abandonment. It has been running in production across hundreds of files at [Combo](https://combohr.com) since 2022.
