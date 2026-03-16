@@ -9,18 +9,17 @@ class Changeset
     @events_collection = Changeset::EventCollection.new
     @db_operations = ::Changeset::DbOperationCollection.new
     @events_catalog = events_catalog
+    @pushed = false
+    @merged = false
   end
 
-  def merge_child(change_set)
-    events_collection.merge_child(change_set.events_collection)
-    db_operations.merge_child(change_set.db_operations)
-    self
-  end
+  def merge_child(child_changeset)
+    raise Changeset::Errors::AlreadyPushedError, "cannot merge a changeset that has already been pushed" if child_changeset.pushed?
+    raise Changeset::Errors::AlreadyMergedError, "cannot merge a changeset that has already been merged" if child_changeset.merged?
 
-  def merge_child_async(&changeset_wrapped_in_proc)
-    async_change_set = ::Changeset::AsyncChangeset.new(changeset_wrapped_in_proc)
-    events_collection.merge_child_async(async_change_set)
-    db_operations.merge_child_async(async_change_set)
+    events_collection.merge_child(child_changeset.events_collection)
+    db_operations.merge_child(child_changeset.db_operations)
+    child_changeset.send(:merged!)
     self
   end
 
@@ -41,7 +40,20 @@ class Changeset
     self
   end
 
+  def pushed?
+    @pushed
+  end
+
+  def merged?
+    @merged
+  end
+
   def push!
+    raise Changeset::Errors::AlreadyPushedError, "this changeset has already been pushed" if @pushed
+    raise Changeset::Errors::AlreadyMergedError, "cannot push a changeset that has been merged into a parent" if @merged
+
+    check_not_already_in_transaction!
+    @pushed = true
     commit_db_operations
     dispatch_events
     self
@@ -75,4 +87,16 @@ class Changeset
   protected
 
   attr_reader :events_collection, :db_operations, :events_catalog
+
+  private
+
+  def merged!
+    @merged = true
+  end
+
+  def check_not_already_in_transaction!
+    checker = Changeset.configuration.already_in_transaction
+    return unless checker
+    raise Changeset::Errors::AlreadyInTransactionError, "push! called inside an open transaction" if checker.call
+  end
 end

@@ -18,23 +18,11 @@ class Changeset
       end
     end
 
-    def merge_child_async(async_change_set)
-      add(async_change_set)
-      self
-    end
-
+    # standard:disable Style/ArgumentsForwarding
     def each(&block)
-      collection.each do |element|
-        case element
-        when Changeset::AsyncChangeset
-          element.db_operations.each do |operation|
-            yield(operation)
-          end
-        else
-          yield(element)
-        end
-      end
+      collection.each(&block)
     end
+    # standard:enable Style/ArgumentsForwarding
 
     def ==(other)
       collection == other.collection

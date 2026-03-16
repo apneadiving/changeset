@@ -2,6 +2,8 @@
 
 class Changeset
   class NullEventCatalog
+    include Changeset::EventCatalogInterface
+
     def dispatch(event)
       raise "No events in NullEventCatalog"
     end

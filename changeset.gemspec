@@ -7,11 +7,12 @@ Gem::Specification.new do |spec|
   spec.version = Changeset::VERSION
   spec.authors = ["Benjamin Roth"]
   spec.email = ["benjamin@rubyist.fr"]
-  spec.summary = "Propagate persistence and events from actions"
-  spec.description = "Propagate persistence and events from actions"
+  spec.summary = "Unit-of-work with event dispatch for Rails"
+  spec.description = "Collect DB operations and events, execute in one transaction, dispatch events after commit."
   spec.license = "MIT"
+  spec.required_ruby_version = ">= 3.1"
 
-  spec.files = Dir["{lib,rbi}/**/*", "MIT-LICENSE", "Rakefile", "README.md"]
+  spec.files = Dir["{lib,rbi}/**/*", "MIT-LICENSE", "README.md"]
 
-  spec.add_dependency "zeitwerk"
+  spec.add_dependency "zeitwerk", ">= 2.5"
 end
