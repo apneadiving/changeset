@@ -21,6 +21,10 @@ class Changeset
   def merge_child(child_changeset)
   end
 
+  sig { params(other: Changeset).returns(T.self_type) }
+  def merge_events(other)
+  end
+
   sig { params(name: Symbol, raw_payload: Changeset::RawEventPayload).returns(T.self_type) }
   def add_event(name, raw_payload)
   end

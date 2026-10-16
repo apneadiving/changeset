@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.2
+- Add `merge_events(other)`: takes over another changeset's events, to dispatch them with its own; its db operations stay the caller's business. Covers a child built inside one of the parent's db operations, without bringing back `merge_child_async`
+
 ## 0.2.1
 - Add `push!(skip_transaction_check: true)` to bypass `already_in_transaction` guard when needed
 

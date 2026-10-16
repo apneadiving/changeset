@@ -23,6 +23,17 @@ class Changeset
     self
   end
 
+  # Takes over another changeset's events, to dispatch them with its own. Its db operations stay the
+  # caller's business.
+  def merge_events(other)
+    raise Changeset::Errors::AlreadyPushedError, "cannot take the events of a pushed changeset" if other.pushed?
+    raise Changeset::Errors::AlreadyMergedError, "cannot take the events of a merged changeset" if other.merged?
+
+    events_collection.merge_child(other.events_collection)
+    other.send(:merged!)
+    self
+  end
+
   def add_event(name, raw_payload)
     events_collection.add(name: name, raw_payload: raw_payload, events_catalog: events_catalog)
     self

@@ -173,6 +173,23 @@ parent_changeset.push!
 
 This is the core value: each service builds its own changeset, and the caller merges them. No service needs to know whether it's running inside a transaction or not.
 
+### Merging only events
+
+Sometimes a child can only be built once the parent's earlier db operations have run: it needs to read the rows they wrote. Build it inside a db operation, commit its db operations there, and let the parent take over its events:
+
+```ruby
+parent.add_db_operation(-> {
+  child = build_child # reads the rows written so far
+  child.commit_db_operations
+  parent.merge_events(child)
+})
+
+parent.push!
+# The child's events dispatch after the commit, with the parent's — none if the transaction rolls back
+```
+
+`merge_events` takes the other changeset's events only: running its db operations is up to you. Events deduplicate as with `merge_child`, and the other changeset is marked as merged, so it can't be pushed (which would dispatch its events twice). Like `merge_child`, it raises `AlreadyPushedError` or `AlreadyMergedError` if the other changeset has already been pushed or merged.
+
 ### Push!
 
 ```ruby
