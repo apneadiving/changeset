@@ -173,22 +173,24 @@ parent_changeset.push!
 
 This is the core value: each service builds its own changeset, and the caller merges them. No service needs to know whether it's running inside a transaction or not.
 
-### Merging only events
+### Merging a child built during the commit
 
-Sometimes a child can only be built once the parent's earlier db operations have run: it needs to read the rows they wrote. Build it inside a db operation, commit its db operations there, and let the parent take over its events:
+Sometimes a child can only be built once the parent's earlier db operations have run: it needs to read the rows they wrote. Give `merge_child` a block instead of a changeset. The block runs during the commit, when its position in the parent's sequence is reached:
 
 ```ruby
-parent.add_db_operation(-> {
-  child = build_child # reads the rows written so far
-  child.commit_db_operations
-  parent.merge_events(child)
-})
+parent
+  .add_db_operation(-> { location.save! })
+  .merge_child { Membership::CreationService.new(location_id: location.id).call } # reads the rows written so far
+  .add_db_operation(-> { location.touch })
 
 parent.push!
-# The child's events dispatch after the commit, with the parent's — none if the transaction rolls back
+# The child's db operations run at the block's position, in the same transaction
+# Its events dispatch after the commit, with the parent's — none if the transaction rolls back
 ```
 
-`merge_events` takes the other changeset's events only: running its db operations is up to you. Events deduplicate as with `merge_child`, and the other changeset is marked as merged, so it can't be pushed (which would dispatch its events twice). Like `merge_child`, it raises `AlreadyPushedError` or `AlreadyMergedError` if the other changeset has already been pushed or merged.
+The block must return a `Changeset`, or `NotAChangesetError` is raised. The child is checked and marked as with an eager merge: `AlreadyPushedError` or `AlreadyMergedError` if it was already pushed or merged, and it can't be pushed afterwards. Children built with a block can themselves merge children with a block.
+
+Calling `merge_child(child)` with a changeset from inside a db operation raises `CommittingError`: the child's operations could not take their position in a sequence that is already running. Pass a block instead.
 
 ### Push!
 

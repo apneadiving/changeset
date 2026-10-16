@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+- `merge_child` takes a block: the child is built during the commit, at the block's position in the parent's sequence, so it can read the rows the earlier operations wrote. Its db operations run there, in the same transaction; its events dispatch after the commit with the parent's. Covers what `merge_child_async` did, without a proxy
+- `merge_child` raises `NotAChangesetError` when the block returns something else than a `Changeset`, and `CommittingError` when called with a changeset from inside a db operation (the child's operations would silently run last)
+- **Breaking:** Remove `merge_events`, added in 0.2.2: the block form of `merge_child` replaces it
+
 ## 0.2.2
 - Add `merge_events(other)`: takes over another changeset's events, to dispatch them with its own; its db operations stay the caller's business. Covers a child built inside one of the parent's db operations, without bringing back `merge_child_async`
 

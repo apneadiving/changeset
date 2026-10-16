@@ -13,5 +13,9 @@ class Changeset
     class AlreadyMergedError < BaseError; end
 
     class AlreadyInTransactionError < BaseError; end
+
+    class CommittingError < BaseError; end
+
+    class NotAChangesetError < BaseError; end
   end
 end

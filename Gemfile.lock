@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    changeset (0.2.2)
+    changeset (0.3.0)
       zeitwerk (>= 2.5)
 
 GEM
