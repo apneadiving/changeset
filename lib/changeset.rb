@@ -20,7 +20,7 @@ class Changeset
   # transaction, and its events dispatch after the commit with the parent's.
   def merge_child(child_changeset = nil, &build_child)
     if committing?
-      raise Changeset::Errors::CommittingError, "cannot merge a changeset while committing: pass a block to merge_child instead"
+      raise Changeset::Errors::CommittingError, "cannot call merge_child from inside a db operation: call it while building the changeset"
     end
 
     check_open!

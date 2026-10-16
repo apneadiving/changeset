@@ -237,8 +237,15 @@ RSpec.describe "Changeset Merge Child with a block", with_sorbet: false do
 
     expect { parent.push! }.to raise_error(
       Changeset::Errors::CommittingError,
-      "cannot merge a changeset while committing: pass a block to merge_child instead"
+      "cannot call merge_child from inside a db operation: call it while building the changeset"
     )
+    expect(log).to eq([:transaction_start])
+  end
+
+  it "refuses a merge_child with a block while committing, for the same reason" do
+    parent.add_db_operation(-> { parent.merge_child { build_child([]) } })
+
+    expect { parent.push! }.to raise_error(Changeset::Errors::CommittingError)
     expect(log).to eq([:transaction_start])
   end
 

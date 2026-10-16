@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- `CommittingError` names the mistake: `merge_child` called from inside a db operation, with or without a block, must move to where the changeset is built
+
 ## 0.3.2
 - `merge_child` with a block records a `DeferredMerge`, performed by the changeset that commits it. After an eager merge the parent has copied it in and commits it, so the child's events land in the parent, through any number of eager merges. Replaces the 0.3.1 fix, which walked back to the root of the merge chain
 - `add_event`, `add_db_operation` and `merge_child` raise `AlreadyMergedError` on a changeset merged into a parent, and `AlreadyPushedError` on a pushed one: what is added afterwards would run twice or never
