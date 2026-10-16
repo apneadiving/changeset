@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1
+- Fix: the events of a child built by a `merge_child` block reach the changeset that pushes, also when the changeset holding the block was itself merged into a parent before the push. They were added to the merged changeset's own collection, copied earlier by the parent, and never dispatched
+
 ## 0.3.0
 - `merge_child` takes a block: the child is built during the commit, at the block's position in the parent's sequence, so it can read the rows the earlier operations wrote. Its db operations run there, in the same transaction; its events dispatch after the commit with the parent's. Covers what `merge_child_async` did, without a proxy
 - `merge_child` raises `NotAChangesetError` when the block returns something else than a `Changeset`, and `CommittingError` when called with a changeset from inside a db operation (the child's operations would silently run last)

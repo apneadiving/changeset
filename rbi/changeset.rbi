@@ -227,4 +227,6 @@ class Changeset
   attr_reader :events_collection
   sig { returns(::Changeset::EventCatalogInterface) }
   attr_reader :events_catalog
+  sig { returns(T.nilable(Changeset)) }
+  attr_reader :merged_into
 end

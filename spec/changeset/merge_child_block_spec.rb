@@ -94,6 +94,41 @@ RSpec.describe "Changeset Merge Child with a block", with_sorbet: false do
     ])
   end
 
+  it "dispatches the block child's events when the changeset holding the block was merged eagerly into a parent" do
+    rows = []
+    child = Changeset.new(event_catalog_klass.new)
+      .add_db_operation(-> { rows << :child_row })
+      .merge_child { build_child(rows) }
+      .add_event(:child_event, {id: :static})
+    parent.add_event(:parent_event, {id: 1}).merge_child(child)
+
+    parent.push!
+
+    expect(log).to eq([
+      :transaction_start,
+      :transaction_start,
+      [:child_write, [:child_row]],
+      :transaction_end,
+      :transaction_end,
+      [:parent_event, {id: 1}],
+      [:child_event, {id: :static}],
+      [:child_event, {rows: [:child_row]}]
+    ])
+  end
+
+  it "dispatches them through several eager merges, and marks the block child as merged" do
+    grandchild = build_child([])
+    child = Changeset.new(event_catalog_klass.new).merge_child { grandchild }
+    middle = Changeset.new(event_catalog_klass.new).merge_child(child)
+    parent.merge_child(middle)
+
+    parent.push!
+
+    expect(log.last).to eq([:child_event, {rows: []}])
+    expect(grandchild).to be_merged
+    expect { grandchild.push! }.to raise_error(Changeset::Errors::AlreadyMergedError)
+  end
+
   it "dedupes the child's events against the parent's" do
     parent
       .add_event(:parent_event, {id: 1})

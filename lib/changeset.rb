@@ -11,6 +11,7 @@ class Changeset
     @events_catalog = events_catalog
     @pushed = false
     @merged = false
+    @merged_into = nil
     @committing = false
   end
 
@@ -33,7 +34,7 @@ class Changeset
     check_mergeable!(child_changeset)
     events_collection.merge_child(child_changeset.events_collection)
     db_operations.merge_child(child_changeset.db_operations)
-    child_changeset.send(:merged!)
+    child_changeset.send(:merged!, self)
     self
   end
 
@@ -105,7 +106,7 @@ class Changeset
 
   protected
 
-  attr_reader :events_collection, :db_operations, :events_catalog
+  attr_reader :events_collection, :db_operations, :events_catalog, :merged_into
 
   private
 
@@ -113,7 +114,9 @@ class Changeset
     @committing
   end
 
-  # Runs during the commit, at the position of the block that built the child.
+  # Runs during the commit, at the position of the block that built the child. The events go to
+  # the root of the merge chain: when this changeset was itself merged into a parent before the
+  # push, its own collection was copied at that time and nothing reads it any more.
   def merge_built_child(child_changeset)
     unless child_changeset.is_a?(Changeset)
       raise Changeset::Errors::NotAChangesetError, "merge_child's block must return a Changeset, got #{child_changeset.class}"
@@ -121,8 +124,16 @@ class Changeset
 
     check_mergeable!(child_changeset)
     child_changeset.commit_db_operations
-    events_collection.merge_child(child_changeset.events_collection)
-    child_changeset.send(:merged!)
+    root.events_collection.merge_child(child_changeset.events_collection)
+    child_changeset.send(:merged!, root)
+  end
+
+  def root
+    changeset = self
+    while (parent = changeset.merged_into)
+      changeset = parent
+    end
+    changeset
   end
 
   def check_mergeable!(child_changeset)
@@ -130,8 +141,9 @@ class Changeset
     raise Changeset::Errors::AlreadyMergedError, "cannot merge a changeset that has already been merged" if child_changeset.merged?
   end
 
-  def merged!
+  def merged!(parent)
     @merged = true
+    @merged_into = parent
   end
 
   def check_not_already_in_transaction!

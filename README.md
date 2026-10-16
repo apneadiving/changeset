@@ -188,7 +188,7 @@ parent.push!
 # Its events dispatch after the commit, with the parent's — none if the transaction rolls back
 ```
 
-The block must return a `Changeset`, or `NotAChangesetError` is raised. The child is checked and marked as with an eager merge: `AlreadyPushedError` or `AlreadyMergedError` if it was already pushed or merged, and it can't be pushed afterwards. Children built with a block can themselves merge children with a block.
+The changeset holding the block may itself be merged into another one before the push: the child's events still reach the changeset that pushes. The block must return a `Changeset`, or `NotAChangesetError` is raised. The child is checked and marked as with an eager merge: `AlreadyPushedError` or `AlreadyMergedError` if it was already pushed or merged, and it can't be pushed afterwards. Children built with a block can themselves merge children with a block.
 
 Calling `merge_child(child)` with a changeset from inside a db operation raises `CommittingError`: the child's operations could not take their position in a sequence that is already running. Pass a block instead.
 
