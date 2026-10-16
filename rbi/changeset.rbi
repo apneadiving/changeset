@@ -2,7 +2,7 @@
 
 class Changeset
   EventPayload = T.type_alias { T.untyped }
-  Callable = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void) }
+  Callable = T.type_alias { T.any(Changeset::PersistenceInterface, T.proc.void, Changeset::DeferredMerge) }
   RawEventPayload = T.type_alias { T.any(EventPayload, T.proc.returns(EventPayload)) }
 
   sig { params(events_catalog: ::Changeset::EventCatalogInterface).void }
@@ -211,6 +211,15 @@ class Changeset
     end
   end
 
+  class DeferredMerge
+    sig { returns(T.proc.returns(Changeset)) }
+    attr_reader :build_child
+
+    sig { params(build_child: T.proc.returns(Changeset)).void }
+    def initialize(build_child)
+    end
+  end
+
   module PersistenceInterface
     extend T::Helpers
     abstract!
@@ -227,6 +236,4 @@ class Changeset
   attr_reader :events_collection
   sig { returns(::Changeset::EventCatalogInterface) }
   attr_reader :events_catalog
-  sig { returns(T.nilable(Changeset)) }
-  attr_reader :merged_into
 end

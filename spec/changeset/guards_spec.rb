@@ -70,6 +70,34 @@ RSpec.describe "Changeset Guards", with_sorbet: false do
       )
     end
 
+    it "refuses to add to a changeset that has been merged" do
+      child = Changeset.new
+      Changeset.new.merge_child(child)
+
+      aggregate_failures do
+        expect { child.add_event(:my_event, {}) }.to raise_error(Changeset::Errors::AlreadyMergedError, "cannot add to a changeset that has been merged into a parent")
+        expect { child.add_db_operation(-> {}) }.to raise_error(Changeset::Errors::AlreadyMergedError)
+        expect { child.merge_child(Changeset.new) }.to raise_error(Changeset::Errors::AlreadyMergedError)
+        expect { child.merge_child { Changeset.new } }.to raise_error(Changeset::Errors::AlreadyMergedError)
+      end
+    end
+
+    it "refuses to add to a changeset that has been pushed" do
+      changeset = Changeset.new
+      changeset.push!
+
+      aggregate_failures do
+        expect { changeset.add_event(:my_event, {}) }.to raise_error(Changeset::Errors::AlreadyPushedError, "cannot add to a changeset that has already been pushed")
+        expect { changeset.add_db_operation(-> {}) }.to raise_error(Changeset::Errors::AlreadyPushedError)
+        expect { changeset.merge_child(Changeset.new) }.to raise_error(Changeset::Errors::AlreadyPushedError)
+      end
+    end
+
+    it "refuses to merge a changeset into itself" do
+      changeset = Changeset.new
+      expect { changeset.merge_child(changeset) }.to raise_error(ArgumentError, "cannot merge a changeset into itself")
+    end
+
     it "allows pushing the parent after merging a child" do
       parent = Changeset.new
       child = Changeset.new

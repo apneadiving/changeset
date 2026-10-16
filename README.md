@@ -188,7 +188,7 @@ parent.push!
 # Its events dispatch after the commit, with the parent's — none if the transaction rolls back
 ```
 
-The changeset holding the block may itself be merged into another one before the push: the child's events still reach the changeset that pushes. The block must return a `Changeset`, or `NotAChangesetError` is raised. The child is checked and marked as with an eager merge: `AlreadyPushedError` or `AlreadyMergedError` if it was already pushed or merged, and it can't be pushed afterwards. Children built with a block can themselves merge children with a block.
+The changeset holding the block may itself be merged into another one before the push: the child's events still reach the changeset that pushes. The block must return a `Changeset`, or `NotAChangesetError` is raised, and must end with it rather than `return` it (the block is a Proc called at commit time: `ArgumentError`). The child is checked and marked as with an eager merge: `AlreadyPushedError` or `AlreadyMergedError` if it was already pushed or merged, and it can't be pushed afterwards. Children built with a block can themselves merge children with a block.
 
 Calling `merge_child(child)` with a changeset from inside a db operation raises `CommittingError`: the child's operations could not take their position in a sequence that is already running. Pass a block instead.
 
@@ -202,7 +202,7 @@ This does two things in sequence:
 1. Runs all DB operations in a single transaction (`commit_db_operations`)
 2. Dispatches all unique events outside the transaction (`dispatch_events`)
 
-A changeset can only be pushed once. Calling `push!` a second time raises `Changeset::Errors::AlreadyPushedError`.
+A changeset can only be pushed once. Calling `push!` a second time raises `Changeset::Errors::AlreadyPushedError`. Once pushed, or merged into a parent, a changeset is closed: `add_event`, `add_db_operation` and `merge_child` raise `AlreadyPushedError` or `AlreadyMergedError`.
 
 Both `commit_db_operations` and `dispatch_events` are public if you need to call them separately. Note: these bypass the double-push guard — they're escape hatches, not the normal path.
 

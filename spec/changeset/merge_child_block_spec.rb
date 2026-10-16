@@ -188,6 +188,17 @@ RSpec.describe "Changeset Merge Child with a block", with_sorbet: false do
     )
   end
 
+  def merge_with_a_return(changeset)
+    changeset.merge_child { return Changeset.new }
+  end
+
+  it "refuses a block that uses return, before writing anything" do
+    merge_with_a_return(parent)
+
+    expect { parent.push! }.to raise_error(ArgumentError, "merge_child's block must not return: end it with the child changeset")
+    expect(log).to eq([:transaction_start])
+  end
+
   it "refuses a block that returns an already pushed changeset" do
     child = build_child([])
     child.push!

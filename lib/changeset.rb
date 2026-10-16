@@ -11,7 +11,6 @@ class Changeset
     @events_catalog = events_catalog
     @pushed = false
     @merged = false
-    @merged_into = nil
     @committing = false
   end
 
@@ -20,25 +19,28 @@ class Changeset
   # read the rows the earlier operations wrote. Its db operations run there, in the same
   # transaction, and its events dispatch after the commit with the parent's.
   def merge_child(child_changeset = nil, &build_child)
-    if build_child
-      raise ArgumentError, "merge_child takes a changeset or a block, not both" if child_changeset
-
-      return add_db_operation(-> { merge_built_child(build_child.call) })
-    end
-
-    raise ArgumentError, "merge_child takes a changeset or a block" if child_changeset.nil?
     if committing?
       raise Changeset::Errors::CommittingError, "cannot merge a changeset while committing: pass a block to merge_child instead"
     end
 
+    check_open!
+    if build_child
+      raise ArgumentError, "merge_child takes a changeset or a block, not both" if child_changeset
+
+      return add_db_operation(DeferredMerge.new(build_child))
+    end
+
+    raise ArgumentError, "merge_child takes a changeset or a block" if child_changeset.nil?
+    raise ArgumentError, "cannot merge a changeset into itself" if child_changeset.equal?(self)
     check_mergeable!(child_changeset)
     events_collection.merge_child(child_changeset.events_collection)
     db_operations.merge_child(child_changeset.db_operations)
-    child_changeset.send(:merged!, self)
+    child_changeset.send(:merged!)
     self
   end
 
   def add_event(name, raw_payload)
+    check_open!
     events_collection.add(name: name, raw_payload: raw_payload, events_catalog: events_catalog)
     self
   end
@@ -51,6 +53,7 @@ class Changeset
   end
 
   def add_db_operation(persistence_handler)
+    check_open!
     db_operations.add(persistence_handler)
     self
   end
@@ -78,7 +81,12 @@ class Changeset
     Changeset.configuration.db_transaction_wrapper.call do
       @committing = true
       begin
-        db_operations.each(&:call)
+        db_operations.each do |operation|
+          case operation
+          when DeferredMerge then merge_built_child(build_deferred_child(operation))
+          else operation.call
+          end
+        end
       ensure
         @committing = false
       end
@@ -106,7 +114,7 @@ class Changeset
 
   protected
 
-  attr_reader :events_collection, :db_operations, :events_catalog, :merged_into
+  attr_reader :events_collection, :db_operations, :events_catalog
 
   private
 
@@ -114,9 +122,9 @@ class Changeset
     @committing
   end
 
-  # Runs during the commit, at the position of the block that built the child. The events go to
-  # the root of the merge chain: when this changeset was itself merged into a parent before the
-  # push, its own collection was copied at that time and nothing reads it any more.
+  # Runs while committing, at the position of the block that built the child, on the changeset
+  # that commits: after an eager merge, the parent copied the deferred merge in and commits it, so
+  # the child's events land in the parent.
   def merge_built_child(child_changeset)
     unless child_changeset.is_a?(Changeset)
       raise Changeset::Errors::NotAChangesetError, "merge_child's block must return a Changeset, got #{child_changeset.class}"
@@ -124,16 +132,22 @@ class Changeset
 
     check_mergeable!(child_changeset)
     child_changeset.commit_db_operations
-    root.events_collection.merge_child(child_changeset.events_collection)
-    child_changeset.send(:merged!, root)
+    events_collection.merge_child(child_changeset.events_collection)
+    child_changeset.send(:merged!)
   end
 
-  def root
-    changeset = self
-    while (parent = changeset.merged_into)
-      changeset = parent
-    end
-    changeset
+  # The block is a Proc called long after the method that wrote it has returned: a `return` inside
+  # it has nowhere to go.
+  def build_deferred_child(deferred_merge)
+    deferred_merge.build_child.call
+  rescue LocalJumpError
+    raise ArgumentError, "merge_child's block must not return: end it with the child changeset"
+  end
+
+  # A pushed or merged changeset is closed: what is added to it afterwards would run twice or never.
+  def check_open!
+    raise Changeset::Errors::AlreadyPushedError, "cannot add to a changeset that has already been pushed" if pushed?
+    raise Changeset::Errors::AlreadyMergedError, "cannot add to a changeset that has been merged into a parent" if merged?
   end
 
   def check_mergeable!(child_changeset)
@@ -141,9 +155,8 @@ class Changeset
     raise Changeset::Errors::AlreadyMergedError, "cannot merge a changeset that has already been merged" if child_changeset.merged?
   end
 
-  def merged!(parent)
+  def merged!
     @merged = true
-    @merged_into = parent
   end
 
   def check_not_already_in_transaction!

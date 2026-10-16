@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+- `merge_child` with a block records a `DeferredMerge`, performed by the changeset that commits it. After an eager merge the parent has copied it in and commits it, so the child's events land in the parent, through any number of eager merges. Replaces the 0.3.1 fix, which walked back to the root of the merge chain
+- `add_event`, `add_db_operation` and `merge_child` raise `AlreadyMergedError` on a changeset merged into a parent, and `AlreadyPushedError` on a pushed one: what is added afterwards would run twice or never
+- `merge_child(changeset)` on itself raises `ArgumentError`; so does a `return` inside the block, instead of Ruby's bare `LocalJumpError`
+
 ## 0.3.1
 - Fix: the events of a child built by a `merge_child` block reach the changeset that pushes, also when the changeset holding the block was itself merged into a parent before the push. They were added to the merged changeset's own collection, copied earlier by the parent, and never dispatched
 
