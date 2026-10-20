@@ -74,6 +74,15 @@ class Changeset
     sig { returns(T.nilable(TransactionChecker)) }
     def already_in_transaction
     end
+
+    DispatchErrorReporter = T.type_alias { T.proc.params(error: StandardError, event: Changeset::Event).void }
+
+    sig { params(on_dispatch_error: T.nilable(DispatchErrorReporter)).returns(T.nilable(DispatchErrorReporter)) }
+    attr_writer :on_dispatch_error
+
+    sig { returns(T.nilable(DispatchErrorReporter)) }
+    def on_dispatch_error
+    end
   end
 
   module EventCatalogInterface
@@ -139,6 +148,10 @@ class Changeset
 
     sig { params(block: T.proc.params(arg0: Changeset::Event).returns(BasicObject)).void }
     def each(&block)
+    end
+
+    sig { params(block: T.proc.params(arg0: T::Array[Changeset::Event]).returns(BasicObject)).void }
+    def each_group(&block)
     end
 
     sig { params(other: Changeset::EventCollection).returns(T::Boolean) }

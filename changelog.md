@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+- **Breaking:** an event whose dispatch raises, its proc payload included, no longer stops the other events. `dispatch_events` dispatches them all, then raises the first error. The transaction is committed by then and nothing dispatches again, so the events left used to be lost. Inside an open transaction, as `already_in_transaction` reports it, the first error still stops the dispatch, since it rolls that transaction back
+- Add optional `on_dispatch_error` config: called with `(error, event)` for each dispatch error after the first, which is the one raised, once every event is dispatched. Without it, or when it raises, those errors are written to stderr with `warn`. An exception that is not a `StandardError` interrupting the dispatch reports every error collected before it
+- Events are deduplicated within their group while dispatching: a proc payload is no longer evaluated for a deduplication key before any event dispatches
 - `CommittingError` names the mistake: `merge_child` called from inside a db operation, with or without a block, must move to where the changeset is built
 
 ## 0.3.2

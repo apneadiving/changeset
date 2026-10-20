@@ -86,6 +86,16 @@ end
 
 When configured, `push!` raises `Changeset::Errors::AlreadyInTransactionError` if the check returns true. This is a no-cost check (in-memory counter, no DB call). When not configured, no check runs.
 
+Optionally, you can report the dispatch errors that are not raised. When several events raise while dispatching, the first error is raised and the others are handed to this callable, with their event:
+
+```ruby
+Changeset.configure do |config|
+  config.on_dispatch_error = ->(error, event) { ErrorTracker.report(error, event: event.name) }
+end
+```
+
+When not configured, or when it raises, those errors are written to stderr with `warn`.
+
 ## Usage
 
 ### Events
@@ -372,7 +382,9 @@ This requires your persistence classes to implement `==`. Lambdas can't be compa
 - The `db_transaction_wrapper` you configure receives a block. All DB operations run inside that block. You control the transaction options (isolation level, `requires_new`, etc.).
 - Events dispatch **after** the wrapper block returns — outside the transaction. This guarantees that background jobs can find the records they need.
 - If any DB operation raises, the transaction rolls back and no events dispatch.
-- DB operations execute in insertion order. Events deduplicate, then dispatch in insertion order.
+- If an event's dispatch raises, including its proc payload, the other events still dispatch, then `push!` raises the first error. The others go to `on_dispatch_error`. The transaction is already committed.
+- Except inside an open transaction, as `already_in_transaction` reports it (a `push!(skip_transaction_check: true)`): the first error stops the dispatch, since it will roll that transaction back. When `already_in_transaction` is not configured, the transaction is taken as committed.
+- DB operations execute in insertion order. Events dispatch grouped by name, in the order each name is first added, and deduplicate within their group.
 - A changeset can only be pushed once — the second `push!` raises `AlreadyPushedError`.
 - If `already_in_transaction` is configured and returns true, `push!` raises `AlreadyInTransactionError` before executing anything. You can bypass this with `push!(skip_transaction_check: true)` for cases where you intentionally push inside a transaction (e.g., inside an advisory lock that opens one).
 
