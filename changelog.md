@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.4.0
+- **Breaking:** requires Ruby 3.2 or later. Ruby 3.1 reached end of life in March 2025 and the CI runners no longer provide it
 - **Breaking:** an event whose dispatch raises no longer stops the other events. `dispatch_events` dispatches them all, then raises the first error. The transaction is committed by then and nothing dispatches again, so the events left used to be lost
 - **Breaking:** since the error is raised once every event is dispatched, a caller that retries the push (a Sidekiq retry) dispatches again every event that succeeded, not only the ones before the failure
 - Add optional `on_dispatch_error` config: called with `(error, event)` for each dispatch error after the first, which is the one raised. Without it, those errors are written to stderr with `warn`

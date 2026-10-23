@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Unit-of-work with event dispatch for Rails"
   spec.description = "Collect DB operations and events, execute in one transaction, dispatch events after commit."
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.1"
+  spec.required_ruby_version = ">= 3.2"
 
   spec.files = Dir["{lib,rbi}/**/*", "MIT-LICENSE", "README.md"]
 
