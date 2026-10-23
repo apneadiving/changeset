@@ -4,6 +4,7 @@ class Changeset
   class Configuration
     attr_writer :db_transaction_wrapper, :already_in_transaction
     attr_reader :already_in_transaction
+    attr_accessor :on_dispatch_error
 
     def db_transaction_wrapper
       return @db_transaction_wrapper if @db_transaction_wrapper

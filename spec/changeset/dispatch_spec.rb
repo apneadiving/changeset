@@ -61,6 +61,115 @@ RSpec.describe "Changeset Dispatch", with_sorbet: false do
     end
   end
 
+  describe "a raising listener" do
+    let(:failing_events) { {} }
+    let(:event_catalog_klass) do
+      log = dispatch_log
+      failing = failing_events
+      Class.new do
+        define_method(:dispatch) do |event|
+          payload = event.payload
+          raise failing[payload] if failing.key?(payload)
+          log << [event.name, payload]
+        end
+        define_method(:known_event?) { |name| %i[event_a event_b event_c].include?(name) }
+      end
+    end
+    let(:reported) { [] }
+
+    after { Changeset.configuration.on_dispatch_error = nil }
+
+    def changeset_with_three_events
+      Changeset.new(event_catalog_klass.new)
+        .add_event(:event_a, {order: 1})
+        .add_event(:event_b, {order: 2})
+        .add_event(:event_c, {order: 3})
+    end
+
+    def report_to_list
+      Changeset.configuration.on_dispatch_error = ->(error, event) { reported << [error, event.name] }
+    end
+
+    it "dispatches the other events, then raises its error" do
+      error = RuntimeError.new("boom")
+      failing_events[{order: 1}] = error
+
+      expect { changeset_with_three_events.push! }.to raise_error(error)
+      expect(dispatch_log).to eq([[:event_b, {order: 2}], [:event_c, {order: 3}]])
+    end
+
+    it "dispatches the other events of its group" do
+      failing_events[{order: 1}] = RuntimeError.new("boom")
+      changeset = Changeset.new(event_catalog_klass.new)
+        .add_event(:event_a, {order: 1})
+        .add_event(:event_a, {order: 2})
+
+      expect { changeset.push! }.to raise_error("boom")
+      expect(dispatch_log).to eq([[:event_a, {order: 2}]])
+    end
+
+    it "raises the first error and hands the others to on_dispatch_error, with their event" do
+      first = RuntimeError.new("first")
+      second = ArgumentError.new("second")
+      failing_events[{order: 1}] = first
+      failing_events[{order: 3}] = second
+      report_to_list
+
+      expect { changeset_with_three_events.push! }.to raise_error(first)
+      expect(reported).to eq([[second, :event_c]])
+      expect(dispatch_log).to eq([[:event_b, {order: 2}]])
+    end
+
+    it "does not call on_dispatch_error for a single error" do
+      failing_events[{order: 2}] = RuntimeError.new("boom")
+      report_to_list
+
+      expect { changeset_with_three_events.push! }.to raise_error("boom")
+      expect(reported).to be_empty
+    end
+
+    it "calls on_dispatch_error once every event is dispatched" do
+      failing_events[{order: 1}] = RuntimeError.new("first")
+      failing_events[{order: 2}] = RuntimeError.new("second")
+      log = dispatch_log
+      Changeset.configuration.on_dispatch_error = ->(error, event) { reported << log.dup }
+
+      expect { changeset_with_three_events.push! }.to raise_error("first")
+      expect(reported).to eq([[[:event_c, {order: 3}]]])
+    end
+
+    it "raises the first error and warns the others when on_dispatch_error is not configured" do
+      failing_events[{order: 1}] = RuntimeError.new("first")
+      failing_events[{order: 2}] = RuntimeError.new("second")
+
+      expect { changeset_with_three_events.push! }
+        .to raise_error("first")
+        .and output(/changeset: event_b dispatch raised .*second \(RuntimeError\)/).to_stderr
+      expect(dispatch_log).to eq([[:event_c, {order: 3}]])
+    end
+
+    it "behaves the same when dispatch_events is called directly" do
+      failing_events[{order: 1}] = RuntimeError.new("first")
+      failing_events[{order: 2}] = RuntimeError.new("second")
+      report_to_list
+
+      expect { changeset_with_three_events.dispatch_events }.to raise_error("first")
+      expect(reported.map { |error, name| [error.message, name] }).to eq([["second", :event_b]])
+      expect(dispatch_log).to eq([[:event_c, {order: 3}]])
+    end
+
+    context "with a proc payload that raises" do
+      it "dispatches the other events" do
+        changeset = Changeset.new(event_catalog_klass.new)
+          .add_event(:event_a, -> { raise "payload" })
+          .add_event(:event_b, {order: 2})
+
+        expect { changeset.push! }.to raise_error("payload")
+        expect(dispatch_log).to eq([[:event_b, {order: 2}]])
+      end
+    end
+  end
+
   describe "db operations with lambdas" do
     it "executes lambda operations in order" do
       call_log = []

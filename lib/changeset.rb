@@ -93,10 +93,27 @@ class Changeset
     end
   end
 
+  # Once the transaction is committed nothing dispatches again: a raising event must not stop the
+  # others. The first error is raised once all are dispatched, the others go to
+  # `on_dispatch_error` so they are still reported.
   def dispatch_events
+    failures = Array.new # standard:disable Style/EmptyLiteral -- Sorbet types `[]` as an empty tuple
     events_collection.each do |event|
       event.dispatch
+    rescue => error
+      failures << [error, event]
     end
+    return if failures.empty?
+
+    reporter = Changeset.configuration.on_dispatch_error
+    failures.drop(1).each do |error, event|
+      if reporter
+        reporter.call(error, event)
+      else
+        warn "changeset: #{event.name} dispatch raised #{error.full_message}"
+      end
+    end
+    raise failures.first.first
   end
 
   def ==(other)
