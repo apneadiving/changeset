@@ -383,6 +383,7 @@ This requires your persistence classes to implement `==`. Lambdas can't be compa
 - Events dispatch **after** the wrapper block returns — outside the transaction. This guarantees that background jobs can find the records they need.
 - If any DB operation raises, the transaction rolls back and no events dispatch.
 - If an event's dispatch raises, the other events still dispatch, then `push!` raises the first error. The others go to `on_dispatch_error`. The transaction is already committed.
+- Except a proc payload that raises while its event shares its name with others: deduplication evaluates it before any event dispatches, so none does.
 - DB operations execute in insertion order. Events deduplicate, then dispatch grouped by name, in the order each name is first added.
 - A changeset can only be pushed once — the second `push!` raises `AlreadyPushedError`.
 - If `already_in_transaction` is configured and returns true, `push!` raises `AlreadyInTransactionError` before executing anything. You can bypass this with `push!(skip_transaction_check: true)` for cases where you intentionally push inside a transaction (e.g., inside an advisory lock that opens one).
