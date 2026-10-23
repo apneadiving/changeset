@@ -150,10 +150,6 @@ class Changeset
     def each(&block)
     end
 
-    sig { params(block: T.proc.params(arg0: T::Array[Changeset::Event]).returns(BasicObject)).void }
-    def each_group(&block)
-    end
-
     sig { params(other: Changeset::EventCollection).returns(T::Boolean) }
     def ==(other)
     end

@@ -95,29 +95,25 @@ class Changeset
 
   # Once the transaction is committed nothing dispatches again: a raising event must not stop the
   # others. The first error is raised once all are dispatched, the others go to
-  # `on_dispatch_error` so they are still reported. Inside an open transaction, the error rolls it
-  # back: the first one stops the dispatch, as the events left would announce rows that are gone.
+  # `on_dispatch_error` so they are still reported.
   def dispatch_events
-    return events_collection.each(&:dispatch) if inside_transaction?
-
-    # Sorbet types `[]` as an empty tuple, whose elements are always nil
-    failures = Array.new # standard:disable Style/EmptyLiteral
-    dispatched = false
-    begin
-      events_collection.each_group do |events|
-        dispatch_group(events, failures)
-      end
-      dispatched = true
-    ensure
-      # An exception that is not a StandardError (an interrupt, a shutdown) went through the
-      # rescue: the errors collected before it are only left to report.
-      report_dispatch_errors(failures) unless dispatched
+    failures = Array.new # standard:disable Style/EmptyLiteral -- Sorbet types `[]` as an empty tuple
+    events_collection.each do |event|
+      event.dispatch
+    rescue => error
+      failures << [error, event]
     end
     return if failures.empty?
 
-    first_failure, *other_failures = failures
-    report_dispatch_errors(other_failures)
-    raise first_failure.first
+    reporter = Changeset.configuration.on_dispatch_error
+    failures.drop(1).each do |error, event|
+      if reporter
+        reporter.call(error, event)
+      else
+        warn "changeset: #{event.name} dispatch raised #{error.full_message}"
+      end
+    end
+    raise failures.first.first
   end
 
   def ==(other)
@@ -178,48 +174,6 @@ class Changeset
 
   def merged!
     @merged = true
-  end
-
-  def inside_transaction?
-    checker = Changeset.configuration.already_in_transaction
-    !!checker&.call
-  end
-
-  # Deduplicates as it goes, so that a proc payload raising while its key is computed fails its own
-  # event only. A single event needs no key, its payload is then evaluated by the dispatch alone.
-  def dispatch_group(events, failures)
-    unicity_keys = {}
-    events.each do |event|
-      if events.size > 1
-        unicity_key = event.unicity_key
-        next if unicity_keys.key?(unicity_key)
-
-        unicity_keys[unicity_key] = true
-      end
-      event.dispatch
-    rescue => error
-      failures << [error, event]
-    end
-  end
-
-  # A reporter that raises must not replace the dispatch error that is raised, nor stop the
-  # reports after it: its error and the one it was given are warned instead.
-  def report_dispatch_errors(failures)
-    reporter = Changeset.configuration.on_dispatch_error
-    failures.each do |error, event|
-      if reporter
-        reporter.call(error, event)
-      else
-        warn_dispatch_error(error, event)
-      end
-    rescue => reporter_error
-      warn "changeset: on_dispatch_error raised #{reporter_error.class}: #{reporter_error.message}"
-      warn_dispatch_error(error, event)
-    end
-  end
-
-  def warn_dispatch_error(error, event)
-    warn "changeset: #{event.name} dispatch raised #{error.class}: #{error.message}"
   end
 
   def check_not_already_in_transaction!

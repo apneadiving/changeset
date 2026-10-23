@@ -25,11 +25,6 @@ class Changeset
     def each(&block)
       uniq_events.each(&block)
     end
-
-    # Events of the same name, in insertion order, not deduplicated
-    def each_group(&block)
-      grouped_events.each_value(&block)
-    end
     # standard:enable Style/ArgumentsForwarding
 
     def ==(other)

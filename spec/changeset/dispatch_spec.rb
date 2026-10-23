@@ -77,10 +77,7 @@ RSpec.describe "Changeset Dispatch", with_sorbet: false do
     end
     let(:reported) { [] }
 
-    after do
-      Changeset.configuration.on_dispatch_error = nil
-      Changeset.configuration.already_in_transaction = nil
-    end
+    after { Changeset.configuration.on_dispatch_error = nil }
 
     def changeset_with_three_events
       Changeset.new(event_catalog_klass.new)
@@ -141,29 +138,13 @@ RSpec.describe "Changeset Dispatch", with_sorbet: false do
       expect(reported).to eq([[[:event_c, {order: 3}]]])
     end
 
-    it "raises the first error, reports the others and warns when on_dispatch_error raises" do
-      first = RuntimeError.new("first")
-      failing_events[{order: 1}] = first
-      failing_events[{order: 2}] = RuntimeError.new("second")
-      failing_events[{order: 3}] = RuntimeError.new("third")
-      Changeset.configuration.on_dispatch_error = lambda do |error, event|
-        reported << error.message
-        raise "reporter down"
-      end
-
-      expect { changeset_with_three_events.push! }
-        .to raise_error(first)
-        .and output(/on_dispatch_error raised RuntimeError: reporter down.*event_b.*second.*event_c.*third/m).to_stderr
-      expect(reported).to eq(["second", "third"])
-    end
-
     it "raises the first error and warns the others when on_dispatch_error is not configured" do
       failing_events[{order: 1}] = RuntimeError.new("first")
       failing_events[{order: 2}] = RuntimeError.new("second")
 
       expect { changeset_with_three_events.push! }
         .to raise_error("first")
-        .and output(/event_b dispatch raised RuntimeError: second/).to_stderr
+        .and output(/changeset: event_b dispatch raised .*second \(RuntimeError\)/).to_stderr
       expect(dispatch_log).to eq([[:event_c, {order: 3}]])
     end
 
@@ -178,7 +159,7 @@ RSpec.describe "Changeset Dispatch", with_sorbet: false do
     end
 
     context "with a proc payload that raises" do
-      it "dispatches the other events when it is alone in its group" do
+      it "dispatches the other events" do
         changeset = Changeset.new(event_catalog_klass.new)
           .add_event(:event_a, -> { raise "payload" })
           .add_event(:event_b, {order: 2})
@@ -186,40 +167,6 @@ RSpec.describe "Changeset Dispatch", with_sorbet: false do
         expect { changeset.push! }.to raise_error("payload")
         expect(dispatch_log).to eq([[:event_b, {order: 2}]])
       end
-
-      it "dispatches the other events when its group has others" do
-        changeset = Changeset.new(event_catalog_klass.new)
-          .add_event(:event_a, -> { raise "payload" })
-          .add_event(:event_a, {order: 1})
-          .add_event(:event_b, {order: 2})
-
-        expect { changeset.push! }.to raise_error("payload")
-        expect(dispatch_log).to eq([[:event_a, {order: 1}], [:event_b, {order: 2}]])
-      end
-    end
-
-    it "reports every collected error when an exception that is not a StandardError follows" do
-      first = RuntimeError.new("first")
-      shutdown = Class.new(Exception) # standard:disable Lint/InheritException
-      failing_events[{order: 1}] = first
-      failing_events[{order: 2}] = shutdown.new("shutdown")
-      report_to_list
-
-      expect { changeset_with_three_events.push! }.to raise_error(shutdown)
-      expect(reported).to eq([[first, :event_a]])
-      expect(dispatch_log).to be_empty
-    end
-
-    it "stops at the first error inside an open transaction, which it would not roll back" do
-      failing_events[{order: 1}] = RuntimeError.new("first")
-      failing_events[{order: 2}] = RuntimeError.new("second")
-      report_to_list
-      changeset = changeset_with_three_events
-      Changeset.configuration.already_in_transaction = -> { true }
-
-      expect { changeset.push!(skip_transaction_check: true) }.to raise_error("first")
-      expect(dispatch_log).to be_empty
-      expect(reported).to be_empty
     end
   end
 
